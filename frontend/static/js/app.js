@@ -1,5 +1,5 @@
 // ==================== Configuration ====================
-const API_BASE_URL = 'http://localhost:8000/api';
+const API_BASE_URL = '/api';
 const POLL_INTERVAL = 1000; // Poll every 1 second
 
 // ==================== State Management ====================
