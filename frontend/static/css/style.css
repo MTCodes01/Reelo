@@ -362,6 +362,7 @@ body {
     margin-bottom: 0.25rem;
     display: -webkit-box;
     -webkit-line-clamp: 2;
+    line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
 }
@@ -441,7 +442,7 @@ body {
     color: var(--text-muted);
     font-size: 0.875rem;
     border-top: 1px solid var(--border);
-    margin-top: auto;
+    margin-top: 2rem;
 }
 
 /* ==================== Mobile ==================== */
