@@ -42,23 +42,55 @@
                 </div>
 
                 <div class="format-selector">
-                    <label class="format-label">Format:</label>
-                    <div class="format-buttons">
-                        <button class="format-btn active" data-format="mp3">
+                    <label class="format-label">Type:</label>
+                    <div class="format-buttons" style="display: flex;">
+                        <button class="format-btn" data-format="audio" style="flex: 1;">
                             MP3
                             <span style="font-size: 0.7em; font-weight: 400; opacity: 0.7">Audio</span>
                         </button>
-                        <button class="format-btn" data-format="mp4-360">
+                        <button class="format-btn active" data-format="video" style="flex: 1;">
+                            MP4
+                            <span style="font-size: 0.7em; font-weight: 400; opacity: 0.7">Video</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="format-selector hidden" id="audio-formats">
+                    <label class="format-label">Quality:</label>
+                    <div class="format-buttons" style="display: flex;">
+                        <button class="format-btn" data-format="mp3-128" style="flex: 1;">
+                            128kbps
+                            <span style="font-size: 0.7em; font-weight: 400; opacity: 0.7">MP3</span>
+                        </button>
+                        <button class="format-btn active" data-format="mp3-320" style="flex: 1;">
+                            320kbps
+                            <span style="font-size: 0.7em; font-weight: 400; opacity: 0.7">MP3</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="format-selector active" id="video-formats">
+                    <label class="format-label">Quality:</label>
+                    <div class="format-buttons" style="display: flex;">
+                        <button class="format-btn" data-format="mp4-360" style="flex: 1;">
                             360p
                             <span style="font-size: 0.7em; font-weight: 400; opacity: 0.7">MP4</span>
                         </button>
-                        <button class="format-btn" data-format="mp4-720">
+                        <button class="format-btn active" data-format="mp4-720" style="flex: 1;">
                             720p
                             <span style="font-size: 0.7em; font-weight: 400; opacity: 0.7">HD</span>
                         </button>
-                        <button class="format-btn" data-format="mp4-1080">
+                        <button class="format-btn" data-format="mp4-1080" style="flex: 1;">
                             1080p
                             <span style="font-size: 0.7em; font-weight: 400; opacity: 0.7">FHD</span>
+                        </button>
+                        <button class="format-btn" data-format="mp4-1440" style="flex: 1;">
+                            1440p
+                            <span style="font-size: 0.7em; font-weight: 400; opacity: 0.7">QHD</span>
+                        </button>
+                        <button class="format-btn" data-format="mp4-2160" style="flex: 1;">
+                            2160p
+                            <span style="font-size: 0.7em; font-weight: 400; opacity: 0.7">4K</span>
                         </button>
                     </div>
                 </div>
