@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description"
+        content="Fast and free YouTube to MP3 and MP4 converter. Download videos in multiple formats with high quality.">
+    <title>YT Converter - Fast YouTube to MP3/MP4 Downloader</title>
+    <link rel="stylesheet" href="static/css/style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+
+<body>
+    <div class="background-gradient"></div>
+
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="logo">
+                <svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <rect width="40" height="40" rx="12" fill="url(#logo-gradient)" />
+                    <path d="M16 14L26 20L16 26V14Z" fill="white" />
+                    <defs>
+                        <linearGradient id="logo-gradient" x1="0" y1="0" x2="40" y2="40">
+                            <stop stop-color="#FF6B6B" />
+                            <stop offset="1" stop-color="#4ECDC4" />
+                        </linearGradient>
+                    </defs>
+                </svg>
+                <h1>YT Converter</h1>
+            </div>
+            <p class="tagline">Fast, Free, Unlimited</p>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Input Section -->
+            <section class="input-section">
+                <div class="input-wrapper">
+                    <input type="text" id="youtube-url" class="url-input" placeholder="Paste YouTube URL here..."
+                        autocomplete="off">
+                    <button id="paste-btn" class="paste-btn" title="Paste from clipboard">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+                            <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
+                        </svg>
+                    </button>
+                </div>
+
+                <div class="format-selector">
+                    <label class="format-label">Format:</label>
+                    <div class="format-buttons">
+                        <button class="format-btn active" data-format="mp3">
+                            MP3
+                            <span style="font-size: 0.7em; font-weight: 400; opacity: 0.7">Audio</span>
+                        </button>
+                        <button class="format-btn" data-format="mp4-360">
+                            360p
+                            <span style="font-size: 0.7em; font-weight: 400; opacity: 0.7">MP4</span>
+                        </button>
+                        <button class="format-btn" data-format="mp4-720">
+                            720p
+                            <span style="font-size: 0.7em; font-weight: 400; opacity: 0.7">HD</span>
+                        </button>
+                        <button class="format-btn" data-format="mp4-1080">
+                            1080p
+                            <span style="font-size: 0.7em; font-weight: 400; opacity: 0.7">FHD</span>
+                        </button>
+                    </div>
+                </div>
+
+                <button id="convert-btn" class="convert-btn">
+                    <span class="btn-text">Convert</span>
+                    <div class="btn-loader"></div>
+                </button>
+            </section>
+
+            <!-- Video Preview Section -->
+            <section id="video-preview" class="video-preview hidden">
+                <div class="preview-card">
+                    <div class="preview-thumbnail">
+                        <img id="preview-thumb" src="" alt="Video thumbnail">
+                        <div class="preview-duration" id="preview-duration"></div>
+                    </div>
+                    <div class="preview-info">
+                        <h3 id="preview-title" class="preview-title"></h3>
+                        <p id="preview-channel" class="preview-channel"></p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Progress Section -->
+            <section id="progress-section" class="progress-section hidden">
+                <div class="progress-card">
+                    <div class="progress-header">
+                        <span id="progress-status">Processing...</span>
+                        <span id="progress-percent">0%</span>
+                    </div>
+                    <div class="progress-bar">
+                        <div id="progress-fill" class="progress-fill"></div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Download Section -->
+            <section id="download-section" class="download-section hidden">
+                <div class="download-card">
+                    <div class="success-icon">
+                        <svg width="60" height="60" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                            <polyline points="22 4 12 14.01 9 11.01" />
+                        </svg>
+                    </div>
+                    <h3>Ready to Download!</h3>
+                    <button id="download-btn" class="download-btn">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                            <polyline points="7 10 12 15 17 10" />
+                            <line x1="12" y1="15" x2="12" y2="3" />
+                        </svg>
+                        Download File
+                    </button>
+                    <button id="convert-another" class="convert-another-btn">Convert Another</button>
+                </div>
+            </section>
+
+            <!-- Error Section -->
+            <section id="error-section" class="error-section hidden">
+                <div class="error-card">
+                    <div class="error-icon">
+                        <svg width="60" height="60" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <circle cx="12" cy="12" r="10" />
+                            <line x1="12" y1="8" x2="12" y2="12" />
+                            <line x1="12" y1="16" x2="12.01" y2="16" />
+                        </svg>
+                    </div>
+                    <h3>Oops! Something went wrong</h3>
+                    <p id="error-message" class="error-message"></p>
+                    <button id="try-again-btn" class="try-again-btn">Try Again</button>
+                </div>
+            </section>
+        </main>
+
+        <!-- Features Section -->
+        <section class="features">
+            <div class="feature-card">
+                <div class="feature-icon">⚡</div>
+                <h3>Lightning Fast</h3>
+                <p>Convert videos in seconds with our optimized servers</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">🎵</div>
+                <h3>High Quality</h3>
+                <p>Download in multiple formats up to 1080p</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">🔒</div>
+                <h3>Secure & Private</h3>
+                <p>Files are automatically deleted after 1 hour</p>
+            </div>
+        </section>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <p>&copy; 2025 YT Converter. For personal use only.</p>
+            <p class="disclaimer">This tool is for downloading videos you have permission to download.</p>
+        </footer>
+    </div>
+
+    <script src="static/js/app.js"></script>
+</body>
+
+</html>
