@@ -78,15 +78,15 @@ class VideoConverter:
         if is_youtube:
             # Strict format selection for YouTube to ensure correct resolution
             if format_type == FormatType.MP4_360:
-                fmt = 'best[height<=360]'
+                fmt = 'bestvideo[height<=360]+bestaudio/best[height<=360]/best'
             elif format_type == FormatType.MP4_720:
-                fmt = 'best[height<=720]'
+                fmt = 'bestvideo[height<=720]+bestaudio/best[height<=720]/best'
             elif format_type == FormatType.MP4_1080:
-                fmt = 'bestvideo[height<=1080]+bestaudio/best[height<=1080]'
+                fmt = 'bestvideo[height<=1080]+bestaudio/best[height<=1080]/best'
             elif format_type == FormatType.MP4_1440:
-                fmt = 'bestvideo[height<=1440]+bestaudio/best[height<=1440]'
+                fmt = 'bestvideo[height<=1440]+bestaudio/best[height<=1440]/best'
             elif format_type == FormatType.MP4_2160:
-                fmt = 'bestvideo[height<=2160]+bestaudio/best[height<=2160]'
+                fmt = 'bestvideo[height<=2160]+bestaudio/best[height<=2160]/best'
             else:
                 fmt = 'bestvideo+bestaudio/best'
         else:
