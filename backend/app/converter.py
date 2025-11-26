@@ -52,9 +52,6 @@ class VideoConverter:
             # Add resolution suffix to filename to avoid overwriting different qualities
             'outtmpl': str(self.download_dir / f'%(id)s_{format_type.value}.%(ext)s'),
             'force_ipv4': True,  # Force IPv4 to avoid 403 errors on some networks
-            'http_headers': {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            },
         }
         
         is_youtube = "youtube.com" in url or "youtu.be" in url
