@@ -36,7 +36,7 @@ class VideoConverter:
                 return VideoInfo(
                     title=info.get('title', 'Unknown'),
                     channel=info.get('uploader', 'Unknown'),
-                    duration=info.get('duration', 0),
+                    duration=int(info.get('duration', 0) or 0),
                     thumbnail=info.get('thumbnail', ''),
                     video_id=info.get('id', '')
                 )
@@ -65,19 +65,19 @@ class VideoConverter:
         elif format_type == FormatType.MP4_360:
             return {
                 **base_opts,
-                'format': 'bestvideo[height<=360]+bestaudio/best[height<=360]',
+                'format': 'bestvideo[height<=360]+bestaudio/best[height<=360]/best',
                 'merge_output_format': 'mp4',
             }
         elif format_type == FormatType.MP4_720:
             return {
                 **base_opts,
-                'format': 'bestvideo[height<=720]+bestaudio/best[height<=720]',
+                'format': 'bestvideo[height<=720]+bestaudio/best[height<=720]/best',
                 'merge_output_format': 'mp4',
             }
         elif format_type == FormatType.MP4_1080:
             return {
                 **base_opts,
-                'format': 'bestvideo[height<=1080]+bestaudio/best[height<=1080]',
+                'format': 'bestvideo[height<=1080]+bestaudio/best[height<=1080]/best',
                 'merge_output_format': 'mp4',
             }
         

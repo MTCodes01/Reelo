@@ -29,7 +29,7 @@ class VideoInfo(BaseModel):
     """Video metadata response"""
     title: str
     channel: str
-    duration: int  # in seconds
+    duration: float  # in seconds
     thumbnail: str
     video_id: str
 

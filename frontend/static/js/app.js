@@ -35,10 +35,11 @@ const elements = {
 };
 
 // ==================== Utility Functions ====================
-function isValidYouTubeUrl(url) {
+function isValidUrl(url) {
     const patterns = [
         /^(https?:\/\/)?(www\.)?(youtube\.com\/watch\?v=|youtu\.be\/)[\w-]+/,
-        /^(https?:\/\/)?(www\.)?youtube\.com\/watch\?.*v=[\w-]+/
+        /^(https?:\/\/)?(www\.)?youtube\.com\/watch\?.*v=[\w-]+/,
+        /^(https?:\/\/)?(www\.)?instagram\.com\/(p|reel|tv)\/[\w-]+\/?/
     ];
     return patterns.some(pattern => pattern.test(url));
 }
@@ -231,8 +232,8 @@ async function handleConvert() {
         return;
     }
     
-    if (!isValidYouTubeUrl(url)) {
-        showError('Invalid YouTube URL. Please enter a valid URL.');
+    if (!isValidUrl(url)) {
+        showError('Invalid URL. Please enter a valid YouTube or Instagram URL.');
         return;
     }
     
