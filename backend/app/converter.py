@@ -49,7 +49,8 @@ class VideoConverter:
         base_opts = {
             'quiet': False,
             'no_warnings': False,
-            'outtmpl': str(self.download_dir / '%(id)s.%(ext)s'),
+            # Add resolution suffix to filename to avoid overwriting different qualities
+            'outtmpl': str(self.download_dir / f'%(id)s_{format_type.value}.%(ext)s'),
         }
         
         is_youtube = "youtube.com" in url or "youtu.be" in url
@@ -131,9 +132,9 @@ class VideoConverter:
             loop = asyncio.get_event_loop()
             await loop.run_in_executor(None, self._download_video, url, ydl_opts)
             
-            # Find the downloaded file with correct extension
+            # Find the downloaded file with correct extension and format suffix
             expected_ext = '.mp3' if format_type == FormatType.MP3 else '.mp4'
-            file_path = self._find_downloaded_file(video_info.video_id, expected_ext)
+            file_path = self._find_downloaded_file(video_info.video_id, format_type.value, expected_ext)
             
             if not file_path:
                 raise Exception("Downloaded file not found")
@@ -156,9 +157,13 @@ class VideoConverter:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.download([url])
     
-    def _find_downloaded_file(self, video_id: str, expected_ext: str = None) -> Optional[Path]:
-        """Find the downloaded file by video ID and optionally filter by extension"""
-        for file in self.download_dir.glob(f"{video_id}.*"):
+    def _find_downloaded_file(self, video_id: str, format_suffix: str, expected_ext: str = None) -> Optional[Path]:
+        """Find the downloaded file by video ID and format suffix"""
+        # Look for files matching the specific format pattern
+        # Pattern: {video_id}_{format_suffix}.{ext}
+        pattern = f"{video_id}_{format_suffix}.*"
+        
+        for file in self.download_dir.glob(pattern):
             if file.is_file():
                 # If expected extension is specified, only return matching files
                 if expected_ext is None or file.suffix == expected_ext:
