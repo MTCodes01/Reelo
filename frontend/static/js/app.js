@@ -5,14 +5,34 @@ const POLL_INTERVAL = 1000; // Poll every 1 second
 // ==================== State Management ====================
 let currentJobId = null;
 let pollInterval = null;
-let selectedFormat = 'mp3';
+let selectedFormat = 'mp4-720'; // Default
+let currentMode = 'video';
+
+// Format Options
+const FORMATS = {
+    video: [
+        { id: 'mp4-360', label: '360p', sub: 'MP4' },
+        { id: 'mp4-720', label: '720p', sub: 'HD' },
+        { id: 'mp4-1080', label: '1080p', sub: 'FHD' },
+        { id: 'mp4-1440', label: '2k', sub: 'QHD' },
+        { id: 'mp4-2160', label: '4k', sub: 'UHD' }
+    ],
+    audio: [
+        { id: 'mp3-48', label: '48k', sub: 'Low' },
+        { id: 'mp3-128', label: '128k', sub: 'Std' },
+        { id: 'mp3-240', label: '240k', sub: 'High' },
+        { id: 'mp3-320', label: '320k', sub: 'Max' }
+    ]
+};
 
 // ==================== DOM Elements ====================
 const elements = {
     urlInput: document.getElementById('youtube-url'),
     pasteBtn: document.getElementById('paste-btn'),
     convertBtn: document.getElementById('convert-btn'),
-    formatBtns: document.querySelectorAll('.format-btn'),
+    
+    // Toggle & Formats
+    formatContainer: document.getElementById('format-buttons-container'),
     
     videoPreview: document.getElementById('video-preview'),
     previewThumb: document.getElementById('preview-thumb'),
@@ -95,6 +115,59 @@ function showError(message) {
     elements.errorMessage.textContent = message;
     showSection(elements.errorSection);
     setLoading(false);
+}
+
+// ==================== Dynamic UI Functions ====================
+function renderFormatButtons(mode) {
+    const formats = FORMATS[mode];
+    elements.formatContainer.innerHTML = '';
+    
+    formats.forEach(fmt => {
+        const btn = document.createElement('button');
+        btn.className = 'format-btn';
+        btn.dataset.format = fmt.id;
+        
+        // Set active if matches selectedFormat, or default to first if mismatch
+        if (selectedFormat === fmt.id) {
+            btn.classList.add('active');
+        }
+        
+        btn.innerHTML = `
+            ${fmt.label}
+            <span style="font-size: 0.7em; font-weight: 400; opacity: 0.7">${fmt.sub}</span>
+        `;
+        
+        btn.addEventListener('click', handleFormatSelect);
+        elements.formatContainer.appendChild(btn);
+    });
+    
+    // If no button is active (e.g. switched mode), select the default for that mode
+    if (!elements.formatContainer.querySelector('.active')) {
+        const defaultFormat = mode === 'video' ? 'mp4-720' : 'mp3-128';
+        selectFormat(defaultFormat);
+    }
+}
+
+function selectFormat(formatId) {
+    selectedFormat = formatId;
+    const btns = elements.formatContainer.querySelectorAll('.format-btn');
+    btns.forEach(btn => {
+        if (btn.dataset.format === formatId) {
+            btn.classList.add('active');
+        } else {
+            btn.classList.remove('active');
+        }
+    });
+}
+
+function handleModeChange(e) {
+    currentMode = e.target.value;
+    renderFormatButtons(currentMode);
+}
+
+function handleFormatSelect(e) {
+    const btn = e.currentTarget;
+    selectFormat(btn.dataset.format);
 }
 
 // ==================== API Functions ====================
@@ -293,13 +366,29 @@ function handleTryAgain() {
 
 // ==================== Event Listeners ====================
 elements.pasteBtn.addEventListener('click', handlePasteClick);
-elements.formatBtns.forEach(btn => {
-    btn.addEventListener('click', handleFormatSelect);
-});
 elements.convertBtn.addEventListener('click', handleConvert);
 elements.downloadBtn.addEventListener('click', handleDownload);
 elements.convertAnotherBtn.addEventListener('click', handleConvertAnother);
 elements.tryAgainBtn.addEventListener('click', handleTryAgain);
+
+// Mode Toggle Listeners
+document.querySelectorAll('.toggle-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+        // Remove active class from all toggle buttons
+        document.querySelectorAll('.toggle-btn').forEach(b => b.classList.remove('active'));
+        
+        // Add active class to clicked button
+        const clickedBtn = e.currentTarget;
+        clickedBtn.classList.add('active');
+        
+        // Update mode
+        const newMode = clickedBtn.dataset.mode;
+        if (newMode !== currentMode) {
+            currentMode = newMode;
+            renderFormatButtons(currentMode);
+        }
+    });
+});
 
 // Allow Enter key to trigger conversion
 elements.urlInput.addEventListener('keypress', (e) => {
@@ -310,5 +399,5 @@ elements.urlInput.addEventListener('keypress', (e) => {
 
 // ==================== Initialization ====================
 console.log('YT Converter initialized');
-console.log('API Base URL:', API_BASE_URL);
-console.log('Make sure the backend server is running on port 8000');
+// Initialize format buttons
+renderFormatButtons(currentMode);

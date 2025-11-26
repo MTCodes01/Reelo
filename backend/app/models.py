@@ -6,9 +6,15 @@ from enum import Enum
 class FormatType(str, Enum):
     """Supported conversion formats"""
     MP3 = "mp3"
+    MP3_48 = "mp3-48"
+    MP3_128 = "mp3-128"
+    MP3_240 = "mp3-240"
+    MP3_320 = "mp3-320"
     MP4_360 = "mp4-360"
     MP4_720 = "mp4-720"
     MP4_1080 = "mp4-1080"
+    MP4_1440 = "mp4-1440"
+    MP4_2160 = "mp4-2160"
 
 
 class ConvertRequest(BaseModel):

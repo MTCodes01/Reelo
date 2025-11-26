@@ -55,14 +55,21 @@ class VideoConverter:
         
         is_youtube = "youtube.com" in url or "youtu.be" in url
         
-        if format_type == FormatType.MP3:
+        if format_type in [FormatType.MP3, FormatType.MP3_48, FormatType.MP3_128, FormatType.MP3_240, FormatType.MP3_320]:
+            # Determine bitrate based on format type
+            bitrate = '192'  # Default
+            if format_type == FormatType.MP3_48: bitrate = '48'
+            elif format_type == FormatType.MP3_128: bitrate = '128'
+            elif format_type == FormatType.MP3_240: bitrate = '240'  # User requested 240, ffmpeg supports arbitrary
+            elif format_type == FormatType.MP3_320: bitrate = '320'
+            
             return {
                 **base_opts,
                 'format': 'bestaudio/best',
                 'postprocessors': [{
                     'key': 'FFmpegExtractAudio',
                     'preferredcodec': 'mp3',
-                    'preferredquality': '192',
+                    'preferredquality': bitrate,
                 }],
             }
         
@@ -70,25 +77,29 @@ class VideoConverter:
         if is_youtube:
             # Strict format selection for YouTube to ensure correct resolution
             if format_type == FormatType.MP4_360:
-                # best[height<=360] is more reliable for lower resolutions on YouTube
                 fmt = 'best[height<=360]'
             elif format_type == FormatType.MP4_720:
-                # best[height<=720] usually finds the 720p mp4 stream
                 fmt = 'best[height<=720]'
             elif format_type == FormatType.MP4_1080:
-                # 1080p usually requires merging video+audio
                 fmt = 'bestvideo[height<=1080]+bestaudio/best[height<=1080]'
+            elif format_type == FormatType.MP4_1440:
+                fmt = 'bestvideo[height<=1440]+bestaudio/best[height<=1440]'
+            elif format_type == FormatType.MP4_2160:
+                fmt = 'bestvideo[height<=2160]+bestaudio/best[height<=2160]'
             else:
                 fmt = 'bestvideo+bestaudio/best'
         else:
             # Loose format selection for Instagram/others (fallback to best available)
-            # This prevents "requested format not available" errors on platforms with limited formats
             if format_type == FormatType.MP4_360:
                 fmt = 'bestvideo[height<=360]+bestaudio/best[height<=360]/best'
             elif format_type == FormatType.MP4_720:
                 fmt = 'bestvideo[height<=720]+bestaudio/best[height<=720]/best'
             elif format_type == FormatType.MP4_1080:
                 fmt = 'bestvideo[height<=1080]+bestaudio/best[height<=1080]/best'
+            elif format_type == FormatType.MP4_1440:
+                fmt = 'bestvideo[height<=1440]+bestaudio/best[height<=1440]/best'
+            elif format_type == FormatType.MP4_2160:
+                fmt = 'bestvideo[height<=2160]+bestaudio/best[height<=2160]/best'
             else:
                 fmt = 'best'
                 
@@ -133,7 +144,7 @@ class VideoConverter:
             await loop.run_in_executor(None, self._download_video, url, ydl_opts)
             
             # Find the downloaded file with correct extension and format suffix
-            expected_ext = '.mp3' if format_type == FormatType.MP3 else '.mp4'
+            expected_ext = '.mp3' if 'mp3' in format_type.value else '.mp4'
             file_path = self._find_downloaded_file(video_info.video_id, format_type.value, expected_ext)
             
             if not file_path:
