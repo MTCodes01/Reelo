@@ -149,7 +149,7 @@ body {
     border-radius: var(--radius-sm);
     padding: 1rem 3rem 1rem 1rem;
     color: var(--text-main);
-    font-size: 1rem;
+    font-size: min(2.5vw, 1rem);
     font-family: inherit;
     transition: all 0.2s ease;
 }
@@ -215,7 +215,7 @@ body {
     border-radius: 6px;
     padding: 0.6rem 0.25rem;
     color: var(--text-muted);
-    font-size: 0.875rem;
+    font-size: min(0.875rem, 3.5vw);
     font-weight: 600;
     cursor: pointer;
     transition: all 0.2s;
