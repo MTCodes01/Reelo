@@ -7,6 +7,7 @@ class FormatType(str, Enum):
     """Supported conversion formats"""
     MP3 = "mp3"
     MP3_48 = "mp3-48"
+    MP3_64 = "mp3-64"
     MP3_128 = "mp3-128"
     MP3_240 = "mp3-240"
     MP3_320 = "mp3-320"

@@ -5,25 +5,8 @@ const POLL_INTERVAL = 1000; // Poll every 1 second
 // ==================== State Management ====================
 let currentJobId = null;
 let pollInterval = null;
-let selectedFormat = 'mp4-720'; // Default
-let currentMode = 'video';
-
-// Format Options
-const FORMATS = {
-    video: [
-        { id: 'mp4-360', label: '360p', sub: 'MP4' },
-        { id: 'mp4-720', label: '720p', sub: 'HD' },
-        { id: 'mp4-1080', label: '1080p', sub: 'FHD' },
-        { id: 'mp4-1440', label: '2k', sub: 'QHD' },
-        { id: 'mp4-2160', label: '4k', sub: 'UHD' }
-    ],
-    audio: [
-        { id: 'mp3-48', label: '48k', sub: 'Low' },
-        { id: 'mp3-128', label: '128k', sub: 'Std' },
-        { id: 'mp3-240', label: '240k', sub: 'High' },
-        { id: 'mp3-320', label: '320k', sub: 'Max' }
-    ]
-};
+let selectedFormat = 'mp3-128'; // Default
+let currentMode = 'audio';
 
 // ==================== DOM Elements ====================
 const elements = {
@@ -31,8 +14,9 @@ const elements = {
     pasteBtn: document.getElementById('paste-btn'),
     convertBtn: document.getElementById('convert-btn'),
     
-    // Toggle & Formats
-    formatContainer: document.getElementById('format-buttons-container'),
+    // Type & Formats
+    audioFormats: document.getElementById('audio-formats'),
+    videoFormats: document.getElementById('video-formats'),
     
     videoPreview: document.getElementById('video-preview'),
     previewThumb: document.getElementById('preview-thumb'),
@@ -98,6 +82,7 @@ function showSection(section) {
     // Show requested section
     if (section) {
         section.classList.remove('hidden');
+        elements.videoPreview.classList.remove('hidden');
     }
 }
 
@@ -117,40 +102,42 @@ function showError(message) {
     setLoading(false);
 }
 
-// ==================== Dynamic UI Functions ====================
-function renderFormatButtons(mode) {
-    const formats = FORMATS[mode];
-    elements.formatContainer.innerHTML = '';
+// ==================== UI Logic ====================
+function handleTypeSelect(e) {
+    const btn = e.currentTarget;
+    const type = btn.dataset.format; // 'audio' or 'video'
     
-    formats.forEach(fmt => {
-        const btn = document.createElement('button');
-        btn.className = 'format-btn';
-        btn.dataset.format = fmt.id;
-        
-        // Set active if matches selectedFormat, or default to first if mismatch
-        if (selectedFormat === fmt.id) {
-            btn.classList.add('active');
-        }
-        
-        btn.innerHTML = `
-            ${fmt.label}
-            <span style="font-size: 0.7em; font-weight: 400; opacity: 0.7">${fmt.sub}</span>
-        `;
-        
-        btn.addEventListener('click', handleFormatSelect);
-        elements.formatContainer.appendChild(btn);
+    if (type === currentMode) return;
+    
+    // Update Type Buttons
+    document.querySelectorAll('[data-format="audio"], [data-format="video"]').forEach(b => {
+        b.classList.remove('active');
     });
+    btn.classList.add('active');
     
-    // If no button is active (e.g. switched mode), select the default for that mode
-    if (!elements.formatContainer.querySelector('.active')) {
-        const defaultFormat = mode === 'video' ? 'mp4-720' : 'mp3-128';
-        selectFormat(defaultFormat);
+    currentMode = type;
+    
+    // Toggle Format Containers
+    if (type === 'audio') {
+        elements.videoFormats.classList.add('hidden');
+        elements.audioFormats.classList.remove('hidden');
+        // Set default audio format
+        selectFormat('mp3-128');
+    } else {
+        elements.audioFormats.classList.add('hidden');
+        elements.videoFormats.classList.remove('hidden');
+        // Set default video format
+        selectFormat('mp4-1080');
     }
 }
 
 function selectFormat(formatId) {
     selectedFormat = formatId;
-    const btns = elements.formatContainer.querySelectorAll('.format-btn');
+    
+    // Update active state in the visible container
+    const container = currentMode === 'audio' ? elements.audioFormats : elements.videoFormats;
+    const btns = container.querySelectorAll('.format-btn');
+    
     btns.forEach(btn => {
         if (btn.dataset.format === formatId) {
             btn.classList.add('active');
@@ -158,11 +145,6 @@ function selectFormat(formatId) {
             btn.classList.remove('active');
         }
     });
-}
-
-function handleModeChange(e) {
-    currentMode = e.target.value;
-    renderFormatButtons(currentMode);
 }
 
 function handleFormatSelect(e) {
@@ -285,17 +267,6 @@ async function handlePasteClick() {
     }
 }
 
-function handleFormatSelect(e) {
-    // Remove active class from all buttons
-    elements.formatBtns.forEach(btn => btn.classList.remove('active'));
-    
-    // Add active class to clicked button
-    e.currentTarget.classList.add('active');
-    
-    // Update selected format
-    selectedFormat = e.currentTarget.dataset.format;
-}
-
 async function handleConvert() {
     const url = elements.urlInput.value.trim();
     
@@ -328,7 +299,7 @@ async function handleConvert() {
         // Start polling for progress
         startProgressPolling(currentJobId);
         
-    } catch (error) {
+        } catch (error) {
         showError(error.message);
     }
 }
@@ -371,23 +342,21 @@ elements.downloadBtn.addEventListener('click', handleDownload);
 elements.convertAnotherBtn.addEventListener('click', handleConvertAnother);
 elements.tryAgainBtn.addEventListener('click', handleTryAgain);
 
-// Mode Toggle Listeners
-document.querySelectorAll('.toggle-btn').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-        // Remove active class from all toggle buttons
-        document.querySelectorAll('.toggle-btn').forEach(b => b.classList.remove('active'));
-        
-        // Add active class to clicked button
-        const clickedBtn = e.currentTarget;
-        clickedBtn.classList.add('active');
-        
-        // Update mode
-        const newMode = clickedBtn.dataset.mode;
-        if (newMode !== currentMode) {
-            currentMode = newMode;
-            renderFormatButtons(currentMode);
-        }
-    });
+// Type Selection
+document.querySelectorAll('[data-format="audio"], [data-format="video"]').forEach(btn => {
+    // Only attach to the type selector buttons, not format buttons
+    if (btn.parentElement.parentElement.querySelector('.format-label').textContent.trim() === 'Type:') {
+        btn.addEventListener('click', handleTypeSelect);
+    }
+});
+
+// Format Selection
+document.querySelectorAll('.format-btn').forEach(btn => {
+    // Exclude type selector buttons
+    const label = btn.parentElement.parentElement.querySelector('.format-label').textContent.trim();
+    if (label !== 'Type:') {
+        btn.addEventListener('click', handleFormatSelect);
+    }
 });
 
 // Allow Enter key to trigger conversion
@@ -398,6 +367,21 @@ elements.urlInput.addEventListener('keypress', (e) => {
 });
 
 // ==================== Initialization ====================
+// ==================== Initialization ====================
 console.log('YT Converter initialized');
-// Initialize format buttons
-renderFormatButtons(currentMode);
+// Initialize UI state
+if (currentMode === 'audio') {
+    elements.videoFormats.classList.add('hidden');
+    elements.audioFormats.classList.remove('hidden');
+    // Ensure correct type button is active
+    document.querySelector('[data-format="video"]').classList.remove('active');
+    document.querySelector('[data-format="audio"]').classList.add('active');
+} else {
+    elements.audioFormats.classList.add('hidden');
+    elements.videoFormats.classList.remove('hidden');
+    // Ensure correct type button is active
+    document.querySelector('[data-format="audio"]').classList.remove('active');
+    document.querySelector('[data-format="video"]').classList.add('active');
+}
+// Set initial active format button
+selectFormat(selectedFormat);

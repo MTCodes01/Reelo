@@ -55,10 +55,11 @@ class VideoConverter:
         
         is_youtube = "youtube.com" in url or "youtu.be" in url
         
-        if format_type in [FormatType.MP3, FormatType.MP3_48, FormatType.MP3_128, FormatType.MP3_240, FormatType.MP3_320]:
+        if format_type in [FormatType.MP3, FormatType.MP3_48, FormatType.MP3_64, FormatType.MP3_128, FormatType.MP3_240, FormatType.MP3_320]:
             # Determine bitrate based on format type
             bitrate = '192'  # Default
             if format_type == FormatType.MP3_48: bitrate = '48'
+            elif format_type == FormatType.MP3_64: bitrate = '64'
             elif format_type == FormatType.MP3_128: bitrate = '128'
             elif format_type == FormatType.MP3_240: bitrate = '240'  # User requested 240, ffmpeg supports arbitrary
             elif format_type == FormatType.MP3_320: bitrate = '320'
