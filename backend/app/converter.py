@@ -44,13 +44,15 @@ class VideoConverter:
             logger.error(f"Error fetching video info: {e}")
             raise ValueError(f"Failed to fetch video info: {str(e)}")
     
-    def _get_format_options(self, format_type: FormatType) -> dict:
-        """Get yt-dlp options based on format type"""
+    def _get_format_options(self, format_type: FormatType, url: str) -> dict:
+        """Get yt-dlp options based on format type and domain"""
         base_opts = {
             'quiet': False,
             'no_warnings': False,
             'outtmpl': str(self.download_dir / '%(id)s.%(ext)s'),
         }
+        
+        is_youtube = "youtube.com" in url or "youtu.be" in url
         
         if format_type == FormatType.MP3:
             return {
@@ -62,26 +64,38 @@ class VideoConverter:
                     'preferredquality': '192',
                 }],
             }
-        elif format_type == FormatType.MP4_360:
-            return {
-                **base_opts,
-                'format': 'bestvideo[height<=360]+bestaudio/best[height<=360]/best',
-                'merge_output_format': 'mp4',
-            }
-        elif format_type == FormatType.MP4_720:
-            return {
-                **base_opts,
-                'format': 'bestvideo[height<=720]+bestaudio/best[height<=720]/best',
-                'merge_output_format': 'mp4',
-            }
-        elif format_type == FormatType.MP4_1080:
-            return {
-                **base_opts,
-                'format': 'bestvideo[height<=1080]+bestaudio/best[height<=1080]/best',
-                'merge_output_format': 'mp4',
-            }
         
-        return base_opts
+        # Video formats
+        if is_youtube:
+            # Strict format selection for YouTube to ensure correct resolution
+            if format_type == FormatType.MP4_360:
+                # best[height<=360] is more reliable for lower resolutions on YouTube
+                fmt = 'best[height<=360]'
+            elif format_type == FormatType.MP4_720:
+                # best[height<=720] usually finds the 720p mp4 stream
+                fmt = 'best[height<=720]'
+            elif format_type == FormatType.MP4_1080:
+                # 1080p usually requires merging video+audio
+                fmt = 'bestvideo[height<=1080]+bestaudio/best[height<=1080]'
+            else:
+                fmt = 'bestvideo+bestaudio/best'
+        else:
+            # Loose format selection for Instagram/others (fallback to best available)
+            # This prevents "requested format not available" errors on platforms with limited formats
+            if format_type == FormatType.MP4_360:
+                fmt = 'bestvideo[height<=360]+bestaudio/best[height<=360]/best'
+            elif format_type == FormatType.MP4_720:
+                fmt = 'bestvideo[height<=720]+bestaudio/best[height<=720]/best'
+            elif format_type == FormatType.MP4_1080:
+                fmt = 'bestvideo[height<=1080]+bestaudio/best[height<=1080]/best'
+            else:
+                fmt = 'best'
+                
+        return {
+            **base_opts,
+            'format': fmt,
+            'merge_output_format': 'mp4',
+        }
     
     async def convert_video(self, job_id: str, url: str, format_type: FormatType):
         """Download and convert video asynchronously"""
@@ -96,7 +110,7 @@ class VideoConverter:
             jobs[job_id].message = "Starting download..."
             jobs[job_id].progress = 10
             
-            ydl_opts = self._get_format_options(format_type)
+            ydl_opts = self._get_format_options(format_type, url)
             
             # Progress hook
             def progress_hook(d):
