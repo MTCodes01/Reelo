@@ -2,6 +2,7 @@ import os
 import uuid
 import asyncio
 import yt_dlp
+import re
 from pathlib import Path
 from typing import Dict, Optional
 import logging
@@ -14,6 +15,26 @@ logger = logging.getLogger(__name__)
 jobs: Dict[str, JobStatus] = {}
 
 
+def normalize_youtube_url(url: str) -> str:
+    """
+    Convert YouTube Shorts URLs to standard watch URLs.
+    Example: youtube.com/shorts/Ir02lSLUmSQ -> youtube.com/watch?v=Ir02lSLUmSQ
+    """
+    shorts_pattern = r'(?:youtube\.com/shorts/)([^&\s?]+)'
+    match = re.search(shorts_pattern, url)
+    
+    if match:
+        video_id = match.group(1)
+        # Preserve protocol if present
+        if url.startswith('http://') or url.startswith('https://'):
+            protocol = url.split('://')[0] + '://'
+        else:
+            protocol = 'https://'
+        return f"{protocol}www.youtube.com/watch?v={video_id}"
+    
+    return url
+
+
 class VideoConverter:
     """Handles video downloading and conversion using yt-dlp"""
     
@@ -23,6 +44,9 @@ class VideoConverter:
     
     def get_video_info(self, url: str) -> VideoInfo:
         """Fetch video metadata without downloading"""
+        # Normalize YouTube Shorts URLs
+        url = normalize_youtube_url(url)
+        
         ydl_opts = {
             'quiet': True,
             'no_warnings': True,
@@ -114,6 +138,9 @@ class VideoConverter:
     async def convert_video(self, job_id: str, url: str, format_type: FormatType):
         """Download and convert video asynchronously"""
         try:
+            # Normalize YouTube Shorts URLs
+            url = normalize_youtube_url(url)
+            
             # Get video info first
             video_info = self.get_video_info(url)
             jobs[job_id].video_title = video_info.title

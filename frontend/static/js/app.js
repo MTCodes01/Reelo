@@ -39,10 +39,28 @@ const elements = {
 };
 
 // ==================== Utility Functions ====================
+function normalizeYouTubeUrl(url) {
+    // Convert YouTube Shorts URLs to standard watch URLs
+    // Example: youtube.com/shorts/Ir02lSLUmSQ -> youtube.com/watch?v=Ir02lSLUmSQ
+    const shortsPattern = /(?:youtube\.com\/shorts\/)([^&\s?]+)/;
+    const match = url.match(shortsPattern);
+    
+    if (match) {
+        const videoId = match[1];
+        // Preserve https:// if present, otherwise add it
+        const hasProtocol = url.startsWith('http://') || url.startsWith('https://');
+        const protocol = hasProtocol ? '' : 'https://';
+        return `${protocol}www.youtube.com/watch?v=${videoId}`;
+    }
+    
+    return url;
+}
+
 function isValidUrl(url) {
     const patterns = [
         /^(https?:\/\/)?(www\.)?(youtube\.com\/watch\?v=|youtu\.be\/)[\w-]+/,
         /^(https?:\/\/)?(www\.)?youtube\.com\/watch\?.*v=[\w-]+/,
+        /^(https?:\/\/)?(www\.)?youtube\.com\/shorts\/[\w-]+/,
         /^(https?:\/\/)?(www\.)?instagram\.com\/(p|reel|tv)\/[\w-]+\/?/
     ];
     return patterns.some(pattern => pattern.test(url));
@@ -51,7 +69,8 @@ function isValidUrl(url) {
 function extractVideoId(url) {
     const patterns = [
         /(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&\s]+)/,
-        /youtube\.com\/watch\?.*v=([^&\s]+)/
+        /youtube\.com\/watch\?.*v=([^&\s]+)/,
+        /youtube\.com\/shorts\/([^&\s?]+)/
     ];
     
     for (const pattern of patterns) {
@@ -268,7 +287,7 @@ async function handlePasteClick() {
 }
 
 async function handleConvert() {
-    const url = elements.urlInput.value.trim();
+    let url = elements.urlInput.value.trim();
     
     // Validate URL
     if (!url) {
@@ -280,6 +299,9 @@ async function handleConvert() {
         showError('Invalid URL. Please enter a valid YouTube or Instagram URL.');
         return;
     }
+    
+    // Normalize YouTube Shorts URLs to standard watch URLs
+    url = normalizeYouTubeUrl(url);
     
     setLoading(true);
     
