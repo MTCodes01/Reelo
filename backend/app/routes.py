@@ -114,9 +114,6 @@ async def download_file(job_id: str):
     return FileResponse(
         path=str(file_path),
         media_type=media_type,
-        filename=download_filename,
-        headers={
-            "Content-Disposition": f'attachment; filename="{download_filename}"'
-        }
+        filename=download_filename
     )
 
