@@ -18,7 +18,7 @@ async def get_video_info(url: str):
     - **url**: YouTube video URL
     """
     try:
-        info = converter.get_video_info(url)
+        info = await converter.get_video_info(url)
         return info
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -37,7 +37,7 @@ async def convert_video(request: ConvertRequest, background_tasks: BackgroundTas
     """
     try:
         # Validate URL by fetching info
-        converter.get_video_info(request.url)
+        await converter.get_video_info(request.url)
         
         # Create job
         job_id = create_job(request.url, request.format)

@@ -42,7 +42,7 @@ class VideoConverter:
         self.download_dir = Path(download_dir)
         self.download_dir.mkdir(exist_ok=True)
     
-    def get_video_info(self, url: str) -> VideoInfo:
+    async def get_video_info(self, url: str) -> VideoInfo:
         """Fetch video metadata without downloading"""
         # Normalize YouTube Shorts URLs
         url = normalize_youtube_url(url)
@@ -53,17 +53,21 @@ class VideoConverter:
             'extract_flat': False,
         }
         
-        try:
+        def _fetch():
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(url, download=False)
-                
-                return VideoInfo(
-                    title=info.get('title', 'Unknown'),
-                    channel=info.get('uploader', 'Unknown'),
-                    duration=int(info.get('duration', 0) or 0),
-                    thumbnail=info.get('thumbnail', ''),
-                    video_id=info.get('id', '')
-                )
+                return ydl.extract_info(url, download=False)
+        
+        try:
+            loop = asyncio.get_event_loop()
+            info = await loop.run_in_executor(None, _fetch)
+            
+            return VideoInfo(
+                title=info.get('title', 'Unknown'),
+                channel=info.get('uploader', 'Unknown'),
+                duration=int(info.get('duration', 0) or 0),
+                thumbnail=info.get('thumbnail', ''),
+                video_id=info.get('id', '')
+            )
         except Exception as e:
             logger.error(f"Error fetching video info: {e}")
             raise ValueError(f"Failed to fetch video info: {str(e)}")
@@ -142,7 +146,8 @@ class VideoConverter:
             url = normalize_youtube_url(url)
             
             # Get video info first
-            video_info = self.get_video_info(url)
+            # Get video info first
+            video_info = await self.get_video_info(url)
             jobs[job_id].video_title = video_info.title
             jobs[job_id].format = format_type.value
             
