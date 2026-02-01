@@ -100,7 +100,7 @@ class VideoConverter:
             'add_metadata': True,  # Add metadata including source URL, upload date, etc.
             'postprocessor_args': {
                 'ffmpeg': [
-                    '-metadata', f'comment=Downloaded from {website_url}'
+                    '-metadata', f'comment={website_url}'
                 ]
             },
         }
