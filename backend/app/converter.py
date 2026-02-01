@@ -72,7 +72,7 @@ class VideoConverter:
             logger.error(f"Error fetching video info: {e}")
             raise ValueError(f"Failed to fetch video info: {str(e)}")
     
-    def _get_format_options(self, format_type: FormatType, url: str) -> dict:
+    def _get_format_options(self, format_type: FormatType, url: str, website_url: str = "http://localhost:7654") -> dict:
         """Get yt-dlp options based on format type and domain"""
         base_opts = {
             'quiet': False,
@@ -95,7 +95,14 @@ class VideoConverter:
                 'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
                 'Accept-Language': 'en-us,en;q=0.5',
                 'Sec-Fetch-Mode': 'navigate',
-            }
+            },
+            # Metadata options
+            'add_metadata': True,  # Add metadata including source URL, upload date, etc.
+            'postprocessor_args': {
+                'ffmpeg': [
+                    '-metadata', f'comment=Downloaded from {website_url}'
+                ]
+            },
         }
         
         is_youtube = "youtube.com" in url or "youtu.be" in url
@@ -179,7 +186,7 @@ class VideoConverter:
             ],
         }
     
-    async def convert_video(self, job_id: str, url: str, format_type: FormatType):
+    async def convert_video(self, job_id: str, url: str, format_type: FormatType, website_url: str = "http://localhost:7654"):
         """Download and convert video asynchronously"""
         try:
             # Normalize YouTube Shorts URLs
@@ -196,7 +203,7 @@ class VideoConverter:
             jobs[job_id].message = "Starting download..."
             jobs[job_id].progress = 10
             
-            ydl_opts = self._get_format_options(format_type, url)
+            ydl_opts = self._get_format_options(format_type, url, website_url)
             
             # Progress hook
             def progress_hook(d):

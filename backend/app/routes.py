@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, BackgroundTasks
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Request
 from fastapi.responses import FileResponse
 import logging
 
@@ -28,7 +28,7 @@ async def get_video_info(url: str):
 
 
 @router.post("/convert", response_model=ConversionResponse)
-async def convert_video(request: ConvertRequest, background_tasks: BackgroundTasks):
+async def convert_video(request: ConvertRequest, background_tasks: BackgroundTasks, req: Request):
     """
     Start video conversion
     
@@ -39,6 +39,9 @@ async def convert_video(request: ConvertRequest, background_tasks: BackgroundTas
         # Validate URL by fetching info
         await converter.get_video_info(request.url)
         
+        # Get website URL from request (just host, no protocol)
+        website_url = req.headers.get("host", f"{req.client.host}:{req.url.port}")
+        
         # Create job
         job_id = create_job(request.url, request.format)
         
@@ -47,7 +50,8 @@ async def convert_video(request: ConvertRequest, background_tasks: BackgroundTas
             converter.convert_video,
             job_id,
             request.url,
-            request.format
+            request.format,
+            website_url  # Pass the detected website URL
         )
         
         logger.info(f"Started conversion job {job_id} for format {request.format}")
