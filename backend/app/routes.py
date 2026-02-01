@@ -9,6 +9,9 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api", tags=["converter"])
 
+@router.get("/version")
+async def version():
+    return {"message": "v1.0.0"}
 
 @router.get("/info", response_model=VideoInfo)
 async def get_video_info(url: str):
