@@ -80,6 +80,22 @@ class VideoConverter:
             # Add resolution suffix to filename to avoid overwriting different qualities
             'outtmpl': str(self.download_dir / f'%(id)s_{format_type.value}.%(ext)s'),
             'force_ipv4': True,  # Force IPv4 to avoid 403 errors on some networks
+            # Anti-403 bypass options
+            'nocheckcertificate': True,
+            'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'referer': 'https://www.youtube.com/',
+            'extractor_retries': 3,
+            'fragment_retries': 10,
+            'skip_unavailable_fragments': True,
+            'geo_bypass': True,
+            'geo_bypass_country': 'US',
+            'socket_timeout': 30,
+            'http_headers': {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                'Accept-Language': 'en-us,en;q=0.5',
+                'Sec-Fetch-Mode': 'navigate',
+            }
         }
         
         is_youtube = "youtube.com" in url or "youtu.be" in url
