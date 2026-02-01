@@ -77,8 +77,8 @@ class VideoConverter:
         base_opts = {
             'quiet': False,
             'no_warnings': False,
-            # Add resolution suffix to filename to avoid overwriting different qualities
-            'outtmpl': str(self.download_dir / f'%(id)s_{format_type.value}.%(ext)s'),
+            # Use video title as filename with format suffix for different qualities
+            'outtmpl': str(self.download_dir / f'%(title)s [{format_type.value}].%(ext)s'),
             'force_ipv4': True,  # Force IPv4 to avoid 403 errors on some networks
             # Anti-403 bypass options
             'nocheckcertificate': True,
@@ -109,14 +109,26 @@ class VideoConverter:
             elif format_type == FormatType.MP3_240: bitrate = '240'  # User requested 240, ffmpeg supports arbitrary
             elif format_type == FormatType.MP3_320: bitrate = '320'
             
+            
             return {
                 **base_opts,
                 'format': 'bestaudio/best',
-                'postprocessors': [{
-                    'key': 'FFmpegExtractAudio',
-                    'preferredcodec': 'mp3',
-                    'preferredquality': bitrate,
-                }],
+                'writethumbnail': True,  # Download thumbnail for embedding
+                'postprocessors': [
+                    {
+                        'key': 'FFmpegExtractAudio',
+                        'preferredcodec': 'mp3',
+                        'preferredquality': bitrate,
+                    },
+                    {
+                        'key': 'FFmpegMetadata',  # Embed metadata (title, artist, etc.)
+                        'add_metadata': True,
+                    },
+                    {
+                        'key': 'EmbedThumbnail',  # Embed thumbnail as album art
+                        'already_have_thumbnail': False,
+                    },
+                ],
             }
         
         # Video formats
@@ -149,10 +161,22 @@ class VideoConverter:
             else:
                 fmt = 'best'
                 
+                
         return {
             **base_opts,
             'format': fmt,
             'merge_output_format': 'mp4',
+            'writethumbnail': True,  # Download thumbnail for embedding
+            'postprocessors': [
+                {
+                    'key': 'FFmpegMetadata',  # Embed metadata (title, artist, etc.)
+                    'add_metadata': True,
+                },
+                {
+                    'key': 'EmbedThumbnail',  # Embed thumbnail in MP4
+                    'already_have_thumbnail': False,
+                },
+            ],
         }
     
     async def convert_video(self, job_id: str, url: str, format_type: FormatType):
@@ -195,7 +219,7 @@ class VideoConverter:
             
             # Find the downloaded file with correct extension and format suffix
             expected_ext = '.mp3' if 'mp3' in format_type.value else '.mp4'
-            file_path = self._find_downloaded_file(video_info.video_id, format_type.value, expected_ext)
+            file_path = self._find_downloaded_file(video_info.title, format_type.value, expected_ext)
             
             if not file_path:
                 raise Exception("Downloaded file not found")
@@ -218,17 +242,31 @@ class VideoConverter:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.download([url])
     
-    def _find_downloaded_file(self, video_id: str, format_suffix: str, expected_ext: str = None) -> Optional[Path]:
-        """Find the downloaded file by video ID and format suffix"""
+    
+    
+    def _find_downloaded_file(self, title: str, format_suffix: str, expected_ext: str = None) -> Optional[Path]:
+        """Find the downloaded file by video title and format suffix"""
         # Look for files matching the specific format pattern
-        # Pattern: {video_id}_{format_suffix}.{ext}
-        pattern = f"{video_id}_{format_suffix}.*"
+        # Pattern: {title} [{format_suffix}].{ext}
+        # Need to escape the brackets in glob pattern as they're special characters
+        # Use a simpler approach: just list all files and filter
         
-        for file in self.download_dir.glob(pattern):
+        matching_files = []
+        for file in self.download_dir.iterdir():
             if file.is_file():
-                # If expected extension is specified, only return matching files
-                if expected_ext is None or file.suffix == expected_ext:
-                    return file
+                # Check if filename contains the format suffix in brackets
+                if f"[{format_suffix}]" in file.name:
+                    # Check extension if specified
+                    if expected_ext is None or file.suffix == expected_ext:
+                        matching_files.append(file)
+        
+        # Return the most recently created file if multiple matches
+        if matching_files:
+            most_recent = max(matching_files, key=lambda f: f.stat().st_mtime)
+            logger.info(f"Found downloaded file: {most_recent.name}")
+            return most_recent
+        
+        logger.warning(f"No file found with format suffix [{format_suffix}] and extension {expected_ext}")
         return None
     
     def get_file_path(self, job_id: str) -> Optional[Path]:
