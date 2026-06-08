@@ -113,6 +113,7 @@ class VideoConverter:
         url: str,
         website_url: str = "http://localhost:7654",
         duration: int = 0,
+        job_id: str = "",
     ) -> dict:
         """Get yt-dlp options based on format type and domain.
 
@@ -136,13 +137,12 @@ class VideoConverter:
             'no_warnings': True,
 
             # ── Output path ────────────────────────────────────────────────
-            # %(title).100s caps the title at 100 chars — prevents hitting the
-            # 255-byte Linux filename limit for long titles like live stream names.
-            'outtmpl': str(self.download_dir / f'%(title).100s [{format_type.value}].%(ext)s'),
-            # Sanitise characters that are illegal on Windows (|, :, ?, etc.)
-            # yt-dlp applies this on all platforms, which also prevents rename
-            # failures on Linux caused by | in titles like "Meeting | Conference".
-            'windowsfilenames': True,
+            # Use the job_id (a plain UUID) as the on-disk filename so we
+            # never have to worry about special characters in video titles
+            # (|, :, –, etc.) breaking ffmpeg's output file open call.
+            # The user-visible filename is set separately in the download
+            # route via Content-Disposition, so nothing changes for users.
+            'outtmpl': str(self.download_dir / f'{job_id}.%(ext)s'),
 
             # ── Network / anti-403 ─────────────────────────────────────────
             'force_ipv4': True,
@@ -293,7 +293,9 @@ class VideoConverter:
             jobs[job_id].progress = 10
 
             ydl_opts = self._get_format_options(
-                format_type, url, website_url, duration=video_info.duration
+                format_type, url, website_url,
+                duration=video_info.duration,
+                job_id=job_id,
             )
 
             # Progress hook — runs inside the worker thread, so only mutate
@@ -316,15 +318,15 @@ class VideoConverter:
             loop = asyncio.get_running_loop()
             await loop.run_in_executor(_executor, self._download_video, url, ydl_opts)
 
-            # Find the downloaded file with correct extension and format suffix
+            # Find the file yt-dlp wrote — it's named {job_id}.{ext}
             expected_ext = '.mp3' if 'mp3' in format_type.value else '.mp4'
-            file_path = self._find_downloaded_file(video_info.title, format_type.value, expected_ext)
+            file_path = self._find_downloaded_file(job_id, expected_ext)
 
             if not file_path:
                 raise Exception("Downloaded file not found")
 
-            # Clean up any leftover thumbnail files for this video title
-            self._cleanup_thumbnails(video_info.title, format_type.value)
+            # Clean up any leftover thumbnail files
+            self._cleanup_thumbnails(job_id)
 
             # Update job with completion
             jobs[job_id].status = "completed"
@@ -352,17 +354,16 @@ class VideoConverter:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.download([url])
 
-    def _cleanup_thumbnails(self, title: str, format_suffix: str):
-        """Delete any leftover thumbnail image files for this video.
+    def _cleanup_thumbnails(self, job_id: str):
+        """Delete any leftover thumbnail image files for this job.
 
         yt-dlp should remove them via EmbedThumbnail, but if ffmpeg fails to
-        embed (e.g. missing AtomicParsley) the .webp / .jpg file stays behind.
+        embed the .webp / .jpg file stays behind.
         """
         if not self.download_dir.exists():
             return
-        stem_prefix = f"{title} [{format_suffix}]"
         for ext in ('.webp', '.jpg', '.jpeg', '.png'):
-            candidate = self.download_dir / f"{stem_prefix}{ext}"
+            candidate = self.download_dir / f"{job_id}{ext}"
             if candidate.exists():
                 try:
                     candidate.unlink()
@@ -370,21 +371,21 @@ class VideoConverter:
                 except Exception as e:
                     logger.warning(f"Could not remove thumbnail {candidate}: {e}")
 
-    def _find_downloaded_file(self, title: str, format_suffix: str, expected_ext: str = None) -> Optional[Path]:
-        """Find the downloaded file by video title and format suffix"""
-        matching_files = []
+    def _find_downloaded_file(self, job_id: str, expected_ext: str) -> Optional[Path]:
+        """Find the file yt-dlp wrote for this job (named {job_id}.{ext})."""
+        # Direct match first
+        candidate = self.download_dir / f"{job_id}{expected_ext}"
+        if candidate.exists():
+            logger.info(f"Found downloaded file: {candidate.name}")
+            return candidate
+
+        # Fallback: scan directory in case extension differs slightly
         for file in self.download_dir.iterdir():
-            if file.is_file():
-                if f"[{format_suffix}]" in file.name:
-                    if expected_ext is None or file.suffix == expected_ext:
-                        matching_files.append(file)
+            if file.is_file() and file.stem == job_id:
+                logger.info(f"Found downloaded file (fallback): {file.name}")
+                return file
 
-        if matching_files:
-            most_recent = max(matching_files, key=lambda f: f.stat().st_mtime)
-            logger.info(f"Found downloaded file: {most_recent.name}")
-            return most_recent
-
-        logger.warning(f"No file found with format suffix [{format_suffix}] and extension {expected_ext}")
+        logger.warning(f"No file found for job {job_id} with extension {expected_ext}")
         return None
 
     def get_file_path(self, job_id: str) -> Optional[Path]:
