@@ -43,11 +43,23 @@ function normalizeYouTubeUrl(url) {
     // Convert YouTube Shorts URLs to standard watch URLs
     // Example: youtube.com/shorts/Ir02lSLUmSQ -> youtube.com/watch?v=Ir02lSLUmSQ
     const shortsPattern = /(?:youtube\.com\/shorts\/)([^&\s?]+)/;
-    const match = url.match(shortsPattern);
+    const shortsMatch = url.match(shortsPattern);
     
-    if (match) {
-        const videoId = match[1];
+    if (shortsMatch) {
+        const videoId = shortsMatch[1];
         // Preserve https:// if present, otherwise add it
+        const hasProtocol = url.startsWith('http://') || url.startsWith('https://');
+        const protocol = hasProtocol ? '' : 'https://';
+        return `${protocol}www.youtube.com/watch?v=${videoId}`;
+    }
+
+    // Convert YouTube Live URLs to standard watch URLs
+    // Example: youtube.com/live/Epd-dLqNpbw -> youtube.com/watch?v=Epd-dLqNpbw
+    const livePattern = /(?:youtube\.com\/live\/)([^&\s?]+)/;
+    const liveMatch = url.match(livePattern);
+
+    if (liveMatch) {
+        const videoId = liveMatch[1];
         const hasProtocol = url.startsWith('http://') || url.startsWith('https://');
         const protocol = hasProtocol ? '' : 'https://';
         return `${protocol}www.youtube.com/watch?v=${videoId}`;
@@ -61,6 +73,7 @@ function isValidUrl(url) {
         /^(https?:\/\/)?(www\.)?(youtube\.com\/watch\?v=|youtu\.be\/)[\w-]+/,
         /^(https?:\/\/)?(www\.)?youtube\.com\/watch\?.*v=[\w-]+/,
         /^(https?:\/\/)?(www\.)?youtube\.com\/shorts\/[\w-]+/,
+        /^(https?:\/\/)?(www\.)?youtube\.com\/live\/[\w-]+/,
         /^(https?:\/\/)?(www\.)?instagram\.com\/(p|reel|tv)\/[\w-]+\/?/
     ];
     return patterns.some(pattern => pattern.test(url));
@@ -70,7 +83,8 @@ function extractVideoId(url) {
     const patterns = [
         /(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&\s]+)/,
         /youtube\.com\/watch\?.*v=([^&\s]+)/,
-        /youtube\.com\/shorts\/([^&\s?]+)/
+        /youtube\.com\/shorts\/([^&\s?]+)/,
+        /youtube\.com\/live\/([^&\s?]+)/
     ];
     
     for (const pattern of patterns) {
