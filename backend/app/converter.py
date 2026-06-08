@@ -175,6 +175,7 @@ class VideoConverter:
             'postprocessor_args': {
                 'ffmpeg': ['-metadata', f'comment={website_url}']
             },
+        }
 
         if format_type in [FormatType.MP3, FormatType.MP3_48, FormatType.MP3_64,
                            FormatType.MP3_128, FormatType.MP3_240, FormatType.MP3_320]:
