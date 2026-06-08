@@ -228,18 +228,20 @@ class VideoConverter:
         h = height_map.get(format_type)
 
         if h:
-            # Prefer a pre-muxed mp4 stream when available — this completely
-            # skips the separate video+audio download and ffmpeg merge step,
-            # which for a 3-hour video saves ~18 GB of I/O.
-            # Falls back to separate streams only when no pre-muxed option exists.
+            # Always request separate video+audio streams for YouTube — YouTube
+            # only offers pre-muxed streams up to ~480p, so requesting
+            # best[height<=1080][ext=mp4] would silently return a 480p stream
+            # when the user asked for 1080p.
+            # The merge I/O cost is unavoidable for high-res; the thumbnail skip
+            # above already handles the main avoidable I/O for long videos.
             fmt = (
-                f'best[height<={h}][ext=mp4]'
-                f'/bestvideo[height<={h}][ext=mp4]+bestaudio[ext=m4a]'
-                f'/bestvideo[height<={h}]+bestaudio'
-                f'/best[height<={h}]/best'
+                f'bestvideo[height<={h}]+bestaudio'
+                f'/best[height<={h}]'
+                f'/best'
             )
         else:
-            fmt = 'best[ext=mp4]/bestvideo+bestaudio/best' if is_youtube else 'best[ext=mp4]/best'
+            fmt = 'bestvideo+bestaudio/best' if is_youtube else 'best'
+
 
         return {
             **base_opts,
