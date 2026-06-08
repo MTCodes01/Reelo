@@ -31,7 +31,7 @@ limiter = Limiter(key_func=get_remote_address)
 async def lifespan(app: FastAPI):
     """Startup and shutdown events"""
     # Startup
-    logger.info("Starting YT Converter API...")
+    logger.info("Starting Reelo API...")
     
     # Create downloads directory
     download_dir = os.getenv("DOWNLOAD_DIR", "./downloads")
@@ -50,25 +50,25 @@ async def lifespan(app: FastAPI):
         )
     )
     
-    logger.info("YT Converter API started successfully")
+    logger.info("Reelo API started successfully")
     
     yield
     
     # Shutdown
-    logger.info("Shutting down YT Converter API...")
+    logger.info("Shutting down Reelo API...")
     cleanup_service.stop()
     cleanup_task.cancel()
     try:
         await cleanup_task
     except asyncio.CancelledError:
         pass
-    logger.info("YT Converter API stopped")
+    logger.info("Reelo API stopped")
 
 
 # Create FastAPI app
 app = FastAPI(
-    title="YT Converter API",
-    description="Fast YouTube to MP3/MP4 converter API",
+    title="Reelo",
+    description="Reelo is a fast, secure, and private YouTube downloader that allows you to download YouTube shorts, videos & Instagram Reels and convert them to MP3 or MP4. With a clean and simple interface, Reelo makes it easy to save your favorite videos for offline viewing.",
     version="1.0.0",
     lifespan=lifespan
 )

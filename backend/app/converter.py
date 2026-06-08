@@ -5,6 +5,7 @@ import yt_dlp
 import re
 from pathlib import Path
 from typing import Dict, Optional
+from datetime import datetime
 import logging
 
 from .models import FormatType, VideoInfo, JobStatus
@@ -186,18 +187,29 @@ class VideoConverter:
             ],
         }
     
-    async def convert_video(self, job_id: str, url: str, format_type: FormatType, website_url: str = "http://localhost:7654"):
-        """Download and convert video asynchronously"""
+    async def convert_video(
+        self,
+        job_id: str,
+        url: str,
+        format_type: FormatType,
+        website_url: str = "http://localhost:7654",
+        prefetched_info: Optional["VideoInfo"] = None,
+    ):
+        """Download and convert video asynchronously.
+
+        Pass *prefetched_info* to skip a redundant yt-dlp metadata call when
+        the caller already validated the URL.
+        """
         try:
             # Normalize YouTube Shorts URLs
             url = normalize_youtube_url(url)
-            
-            # Get video info first
-            # Get video info first
-            video_info = await self.get_video_info(url)
+
+            # Re-use already-fetched info when available to avoid a second
+            # network round-trip.
+            video_info = prefetched_info or await self.get_video_info(url)
             jobs[job_id].video_title = video_info.title
             jobs[job_id].format = format_type.value
-            
+
             # Update job status
             jobs[job_id].status = "processing"
             jobs[job_id].message = "Starting download..."
@@ -296,7 +308,8 @@ def create_job(url: str, format_type: FormatType) -> str:
         status="pending",
         progress=0,
         message="Job created",
-        format=format_type.value
+        format=format_type.value,
+        created_at=datetime.utcnow().isoformat(),
     )
     return job_id
 

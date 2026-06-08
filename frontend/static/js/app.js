@@ -1,10 +1,13 @@
 // ==================== Configuration ====================
 const API_BASE_URL = '/api';
-const POLL_INTERVAL = 1000; // Poll every 1 second
+const POLL_INITIAL_MS = 1000;   // first poll after 1 s
+const POLL_MAX_MS    = 10000;  // back off up to 10 s
+const POLL_TIMEOUT_MS = 10 * 60 * 1000; // hard stop after 10 min
 
 // ==================== State Management ====================
 let currentJobId = null;
-let pollInterval = null;
+let pollTimer = null;        // setTimeout handle
+let pollTimeoutTimer = null; // hard-stop handle
 let selectedFormat = 'mp3-128'; // Default
 let currentMode = 'audio';
 
@@ -258,35 +261,59 @@ function updateProgress(status, percent) {
     elements.progressFill.style.width = `${percent}%`;
 }
 
-function startProgressPolling(jobId) {
-    // Clear any existing interval
-    if (pollInterval) {
-        clearInterval(pollInterval);
+function clearPolling() {
+    if (pollTimer) {
+        clearTimeout(pollTimer);
+        pollTimer = null;
     }
-    
-    pollInterval = setInterval(async () => {
+    if (pollTimeoutTimer) {
+        clearTimeout(pollTimeoutTimer);
+        pollTimeoutTimer = null;
+    }
+}
+
+function startProgressPolling(jobId) {
+    clearPolling();
+
+    let delay = POLL_INITIAL_MS;
+
+    // Hard timeout — stop polling after POLL_TIMEOUT_MS no matter what
+    pollTimeoutTimer = setTimeout(() => {
+        clearPolling();
+        showError('Conversion timed out. Please try again.');
+    }, POLL_TIMEOUT_MS);
+
+    async function poll() {
+        // Pause while the tab is hidden to save resources
+        if (document.hidden) {
+            pollTimer = setTimeout(poll, POLL_MAX_MS);
+            return;
+        }
+
         try {
             const status = await checkJobStatus(jobId);
-            
+
             if (status.status === 'completed') {
-                clearInterval(pollInterval);
-                pollInterval = null;
+                clearPolling();
                 showSection(elements.downloadSection);
                 setLoading(false);
             } else if (status.status === 'failed') {
-                clearInterval(pollInterval);
-                pollInterval = null;
+                clearPolling();
                 showError(status.error || 'Conversion failed. Please try again.');
             } else {
-                // Update progress
                 updateProgress(status.message || 'Processing...', status.progress || 0);
+                // Exponential backoff: double delay on each tick, cap at max
+                delay = Math.min(delay * 2, POLL_MAX_MS);
+                pollTimer = setTimeout(poll, delay);
             }
         } catch (error) {
-            clearInterval(pollInterval);
-            pollInterval = null;
+            clearPolling();
             showError(error.message);
         }
-    }, POLL_INTERVAL);
+    }
+
+    // Kick off the first poll after the initial delay
+    pollTimer = setTimeout(poll, delay);
 }
 
 // ==================== Event Handlers ====================
@@ -352,10 +379,7 @@ function handleConvertAnother() {
     elements.urlInput.value = '';
     
     // Clear any polling
-    if (pollInterval) {
-        clearInterval(pollInterval);
-        pollInterval = null;
-    }
+    clearPolling();
     
     // Hide all sections
     showSection(null);
@@ -404,7 +428,7 @@ elements.urlInput.addEventListener('keypress', (e) => {
 
 // ==================== Initialization ====================
 // ==================== Initialization ====================
-console.log('YT Converter initialized');
+console.log('Reelo initialized');
 // Initialize UI state
 if (currentMode === 'audio') {
     elements.videoFormats.classList.add('hidden');

@@ -51,6 +51,7 @@ class JobStatus(BaseModel):
     file_path: Optional[str] = None  # Path to downloaded file when completed
     video_title: Optional[str] = None  # Video title for better filename
     format: Optional[str] = None  # Requested format (mp3, mp4-360, etc.)
+    created_at: Optional[str] = None  # ISO timestamp — used by cleanup to evict stale records
 
 
 class ConversionResponse(BaseModel):

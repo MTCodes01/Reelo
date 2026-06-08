@@ -1,8 +1,8 @@
-# YT Converter - YouTube to MP3/MP4 Converter
+# Reelo - YouTube to MP3/MP4 Converter
 
-A modern, fast, and free YouTube to MP3/MP4 converter with a beautiful UI and powerful backend.
+Reelo is a fast, secure, and private YouTube downloader that allows you to download YouTube shorts, videos & Instagram Reels and convert them to MP3 or MP4. With a clean and simple interface, Reelo makes it easy to save your favorite videos for offline viewing.
 
-![YT Converter](https://img.shields.io/badge/version-1.0.0-blue)
+![Reelo](https://img.shields.io/badge/version-1.0.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
 ## ✨ Features

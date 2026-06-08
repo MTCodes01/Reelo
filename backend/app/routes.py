@@ -39,8 +39,9 @@ async def convert_video(request: ConvertRequest, background_tasks: BackgroundTas
     - **format**: Output format (mp3, mp4-360, mp4-720, mp4-1080)
     """
     try:
-        # Validate URL by fetching info
-        await converter.get_video_info(request.url)
+        # Fetch info once — used for validation AND passed to the conversion
+        # job so it doesn't need to fetch it a second time.
+        video_info = await converter.get_video_info(request.url)
         
         # Get website URL from request (just host, no protocol)
         website_url = req.headers.get("host", f"{req.client.host}:{req.url.port}")
@@ -54,7 +55,8 @@ async def convert_video(request: ConvertRequest, background_tasks: BackgroundTas
             job_id,
             request.url,
             request.format,
-            website_url  # Pass the detected website URL
+            website_url,
+            video_info,  # Pass pre-fetched info — avoids a duplicate yt-dlp call
         )
         
         logger.info(f"Started conversion job {job_id} for format {request.format}")
