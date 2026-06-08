@@ -1,6 +1,8 @@
 import os
+import gc
 import uuid
 import asyncio
+import ctypes
 import yt_dlp
 import re
 from concurrent.futures import ThreadPoolExecutor
@@ -12,6 +14,22 @@ import logging
 from .models import FormatType, VideoInfo, JobStatus
 
 logger = logging.getLogger(__name__)
+
+
+def _release_memory():
+    """Force Python to release unused heap memory back to the OS.
+
+    Python's allocator (pymalloc) keeps freed objects in an internal pool
+    and never returns them to the OS on its own.  After a large job:
+      1. gc.collect() — frees any reference-cycle garbage
+      2. malloc_trim(0) — tells glibc to return the now-empty pages to the OS
+    This is Linux-only (no-op on other platforms) and safe to call anytime.
+    """
+    gc.collect()
+    try:
+        ctypes.CDLL('libc.so.6').malloc_trim(0)
+    except Exception:
+        pass  # Non-Linux (Windows/macOS dev machines) — silently skip
 
 # Job storage (in production, use Redis or a database)
 jobs: Dict[str, JobStatus] = {}
@@ -64,7 +82,15 @@ class VideoConverter:
 
         def _fetch():
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                return ydl.extract_info(url, download=False)
+                info = ydl.extract_info(url, download=False)
+                # Drop the huge 'formats' list immediately — we only need basic
+                # metadata fields and this dict can be 5–10 MB for long videos.
+                if info:
+                    info.pop('formats', None)
+                    info.pop('thumbnails', None)
+                    info.pop('automatic_captions', None)
+                    info.pop('subtitles', None)
+                return info
 
         try:
             loop = asyncio.get_running_loop()
@@ -81,8 +107,27 @@ class VideoConverter:
             logger.error(f"Error fetching video info: {e}")
             raise ValueError(f"Failed to fetch video info: {str(e)}")
 
-    def _get_format_options(self, format_type: FormatType, url: str, website_url: str = "http://localhost:7654") -> dict:
-        """Get yt-dlp options based on format type and domain"""
+    def _get_format_options(
+        self,
+        format_type: FormatType,
+        url: str,
+        website_url: str = "http://localhost:7654",
+        duration: int = 0,
+    ) -> dict:
+        """Get yt-dlp options based on format type and domain.
+
+        *duration* (seconds) drives two I/O optimisations for long videos:
+          - Skip thumbnail embedding (saves one full ffmpeg read+write pass)
+          - Prefer pre-muxed streams (saves the separate video+audio merge step)
+        """
+        # Videos longer than 30 minutes are treated as "long". Thumbnail
+        # embedding on a 3-hour file means ffmpeg reads and rewrites ~8 GB
+        # just to attach a tiny image — skip it to cut I/O roughly in half.
+        LONG_VIDEO_THRESHOLD = 30 * 60  # 30 minutes in seconds
+        long_video = duration > LONG_VIDEO_THRESHOLD
+
+        is_youtube = "youtube.com" in url or "youtu.be" in url
+
         base_opts = {
             # ── Output verbosity ───────────────────────────────────────────
             # Keep quiet=True so yt-dlp doesn't buffer large log strings in
@@ -91,7 +136,13 @@ class VideoConverter:
             'no_warnings': True,
 
             # ── Output path ────────────────────────────────────────────────
-            'outtmpl': str(self.download_dir / f'%(title)s [{format_type.value}].%(ext)s'),
+            # %(title).100s caps the title at 100 chars — prevents hitting the
+            # 255-byte Linux filename limit for long titles like live stream names.
+            'outtmpl': str(self.download_dir / f'%(title).100s [{format_type.value}].%(ext)s'),
+            # Sanitise characters that are illegal on Windows (|, :, ?, etc.)
+            # yt-dlp applies this on all platforms, which also prevents rename
+            # failures on Linux caused by | in titles like "Meeting | Conference".
+            'windowsfilenames': True,
 
             # ── Network / anti-403 ─────────────────────────────────────────
             'force_ipv4': True,
@@ -112,14 +163,11 @@ class VideoConverter:
             },
 
             # ── Resource limits ────────────────────────────────────────────
-            # Download one fragment at a time — reduces peak memory usage
-            # significantly for DASH/HLS streams (e.g. long YouTube videos).
+            # Download one fragment at a time — reduces peak memory for HLS/DASH.
             'concurrent_fragment_downloads': 1,
             # Keep the in-memory download buffer small so data is flushed to
-            # disk continuously rather than accumulated in RAM.  Without this,
-            # a 3+ hour video can push memory up by hundreds of MB purely from
-            # buffered network reads.
-            'buffersize': 16 * 1024,       # 16 KB write-to-disk buffer
+            # disk continuously rather than accumulated in RAM.
+            'buffersize': 16 * 1024,           # 16 KB write-to-disk buffer
             'http_chunk_size': 10 * 1024 * 1024,  # fetch in 10 MB HTTP chunks
 
             # ── Metadata ───────────────────────────────────────────────────
@@ -127,9 +175,6 @@ class VideoConverter:
             'postprocessor_args': {
                 'ffmpeg': ['-metadata', f'comment={website_url}']
             },
-        }
-
-        is_youtube = "youtube.com" in url or "youtu.be" in url
 
         if format_type in [FormatType.MP3, FormatType.MP3_48, FormatType.MP3_64,
                            FormatType.MP3_128, FormatType.MP3_240, FormatType.MP3_320]:
@@ -146,10 +191,9 @@ class VideoConverter:
             return {
                 **base_opts,
                 'format': 'bestaudio/best',
-                # writethumbnail saves a separate image file which yt-dlp
-                # embeds as album art then leaves on disk.  We enable it but
-                # add EmbedThumbnail so yt-dlp cleans it up automatically.
-                'writethumbnail': True,
+                # Only embed thumbnail for short videos — for long videos the
+                # ffmpeg re-write pass costs as much I/O as the download itself.
+                'writethumbnail': not long_video,
                 'postprocessors': [
                     {
                         'key': 'FFmpegExtractAudio',
@@ -160,12 +204,15 @@ class VideoConverter:
                         'key': 'FFmpegMetadata',
                         'add_metadata': True,
                     },
-                    {
-                        # EmbedThumbnail removes the standalone image file
-                        # after embedding it — no orphan .webp/.jpg left behind.
-                        'key': 'EmbedThumbnail',
-                        'already_have_thumbnail': False,
-                    },
+                    *(
+                        [{
+                            # EmbedThumbnail removes the standalone image file
+                            # after embedding it — no orphan .webp/.jpg left.
+                            'key': 'EmbedThumbnail',
+                            'already_have_thumbnail': False,
+                        }]
+                        if not long_video else []
+                    ),
                 ],
             }
 
@@ -180,25 +227,37 @@ class VideoConverter:
         h = height_map.get(format_type)
 
         if h:
-            fmt = f'bestvideo[height<={h}]+bestaudio/best[height<={h}]/best'
+            # Prefer a pre-muxed mp4 stream when available — this completely
+            # skips the separate video+audio download and ffmpeg merge step,
+            # which for a 3-hour video saves ~18 GB of I/O.
+            # Falls back to separate streams only when no pre-muxed option exists.
+            fmt = (
+                f'best[height<={h}][ext=mp4]'
+                f'/bestvideo[height<={h}][ext=mp4]+bestaudio[ext=m4a]'
+                f'/bestvideo[height<={h}]+bestaudio'
+                f'/best[height<={h}]/best'
+            )
         else:
-            fmt = 'bestvideo+bestaudio/best' if is_youtube else 'best'
+            fmt = 'best[ext=mp4]/bestvideo+bestaudio/best' if is_youtube else 'best[ext=mp4]/best'
 
         return {
             **base_opts,
             'format': fmt,
             'merge_output_format': 'mp4',
-            'writethumbnail': True,
+            # Skip thumbnail for long videos — same reason as above.
+            'writethumbnail': not long_video,
             'postprocessors': [
                 {
                     'key': 'FFmpegMetadata',
                     'add_metadata': True,
                 },
-                {
-                    # Cleans up the standalone thumbnail file after embedding.
-                    'key': 'EmbedThumbnail',
-                    'already_have_thumbnail': False,
-                },
+                *(
+                    [{
+                        'key': 'EmbedThumbnail',
+                        'already_have_thumbnail': False,
+                    }]
+                    if not long_video else []
+                ),
             ],
         }
 
@@ -230,7 +289,9 @@ class VideoConverter:
             jobs[job_id].message = "Starting download..."
             jobs[job_id].progress = 10
 
-            ydl_opts = self._get_format_options(format_type, url, website_url)
+            ydl_opts = self._get_format_options(
+                format_type, url, website_url, duration=video_info.duration
+            )
 
             # Progress hook — runs inside the worker thread, so only mutate
             # simple Python objects (no async calls here).
@@ -274,6 +335,14 @@ class VideoConverter:
             logger.error(f"Job {job_id} failed: {e}")
             jobs[job_id].status = "failed"
             jobs[job_id].error = str(e)
+
+        finally:
+            # Always release memory after a job ends (success or failure).
+            # This returns the heap pages used by yt-dlp's info dicts and
+            # ffmpeg buffers back to the OS so the container RAM drops back
+            # to its idle baseline.
+            _release_memory()
+            logger.debug(f"Memory released after job {job_id}")
 
     def _download_video(self, url: str, ydl_opts: dict):
         """Synchronous download function — runs inside the thread pool."""
