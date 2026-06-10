@@ -78,6 +78,13 @@ class VideoConverter:
             'extract_flat': False,
             # Don't load/parse format list — we only need basic metadata
             'skip_download': True,
+            # Use mobile clients — they bypass bot checks fastest and don't
+            # need JS challenge solving (which adds several seconds).
+            'extractor_args': {'youtube': ['player_client=ios,android']},
+            # Tight timeout for metadata-only fetch: fail fast and let the
+            # caller show an error rather than waiting 20 s per retry.
+            'socket_timeout': 10,
+            'extractor_retries': 1,
         }
 
         def _fetch():
@@ -135,6 +142,7 @@ class VideoConverter:
             # memory. Progress is delivered via the progress_hook instead.
             'quiet': True,
             'no_warnings': True,
+            'nocolor': True,
 
             # ── Output path ────────────────────────────────────────────────
             # Use the job_id (a plain UUID) as the on-disk filename so we
@@ -147,28 +155,13 @@ class VideoConverter:
             # ── Network / anti-403 ─────────────────────────────────────────
             'force_ipv4': True,
             'nocheckcertificate': True,
-            'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'referer': 'https://www.youtube.com/',
             'extractor_retries': 3,
             'fragment_retries': 10,
             'skip_unavailable_fragments': True,
             'geo_bypass': True,
             'geo_bypass_country': 'US',
             'socket_timeout': 30,
-            'http_headers': {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-                'Accept-Language': 'en-us,en;q=0.5',
-                'Sec-Fetch-Mode': 'navigate',
-            },
-
-            # ── Resource limits ────────────────────────────────────────────
-            # Download one fragment at a time — reduces peak memory for HLS/DASH.
-            'concurrent_fragment_downloads': 1,
-            # Keep the in-memory download buffer small so data is flushed to
-            # disk continuously rather than accumulated in RAM.
-            'buffersize': 16 * 1024,           # 16 KB write-to-disk buffer
-            'http_chunk_size': 10 * 1024 * 1024,  # fetch in 10 MB HTTP chunks
+            'extractor_args': {'youtube': ['player_client=ios,android,web']},
 
             # ── Metadata ───────────────────────────────────────────────────
             'add_metadata': True,
@@ -303,11 +296,14 @@ class VideoConverter:
             def progress_hook(d):
                 if d['status'] == 'downloading':
                     try:
-                        percent_str = d.get('_percent_str', '0%').strip().rstrip('%')
-                        jobs[job_id].progress = min(int(float(percent_str) * 0.8), 80)
-                        jobs[job_id].message = f"Downloading... {percent_str}%"
-                    except Exception:
-                        pass
+                        percent_str = d.get('_percent_str', '0%')
+                        match = re.search(r'([0-9.]+)', percent_str)
+                        if match:
+                            clean_percent = match.group(1)
+                            jobs[job_id].progress = min(int(float(clean_percent) * 0.8), 80)
+                            jobs[job_id].message = f"Downloading... {clean_percent}%"
+                    except Exception as e:
+                        logger.warning(f"Error parsing progress hook: {e}")
                 elif d['status'] == 'finished':
                     jobs[job_id].progress = 85
                     jobs[job_id].message = "Processing..."

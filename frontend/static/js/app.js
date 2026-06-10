@@ -295,6 +295,7 @@ function startProgressPolling(jobId) {
 
             if (status.status === 'completed') {
                 clearPolling();
+                updateProgress('Complete!', 100);
                 showSection(elements.downloadSection);
                 setLoading(false);
             } else if (status.status === 'failed') {
@@ -302,8 +303,9 @@ function startProgressPolling(jobId) {
                 showError(status.error || 'Conversion failed. Please try again.');
             } else {
                 updateProgress(status.message || 'Processing...', status.progress || 0);
-                // Exponential backoff: double delay on each tick, cap at max
-                delay = Math.min(delay * 2, POLL_MAX_MS);
+                // Use a gentle 2-second poll interval during active processing
+                // so the UI stays responsive without hammering the server.
+                delay = 2000;
                 pollTimer = setTimeout(poll, delay);
             }
         } catch (error) {
