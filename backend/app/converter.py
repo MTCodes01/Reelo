@@ -1,4 +1,5 @@
 import os
+import random
 import gc
 import uuid
 import asyncio
@@ -60,6 +61,22 @@ def normalize_youtube_url(url: str) -> str:
     return url
 
 
+def _is_instagram(url: str) -> bool:
+    """Return True if the URL points to Instagram content."""
+    return any(domain in url for domain in ('instagram.com', 'instagr.am'))
+
+
+# ── Instagram anti-detection constants ─────────────────────────────────────────
+# A pool of recent, real-world Chrome User-Agent strings.  We pick one at random
+# per request so that repeated downloads don't share a single fingerprint.
+_CHROME_USER_AGENTS = [
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+]
+
+
 class VideoConverter:
     """Handles video downloading and conversion using yt-dlp"""
 
@@ -67,10 +84,63 @@ class VideoConverter:
         self.download_dir = Path(download_dir)
         self.download_dir.mkdir(exist_ok=True)
 
+    # ── Instagram-specific option overrides ──────────────────────────────────
+    @staticmethod
+    def _instagram_overrides() -> dict:
+        """Return yt-dlp options that help avoid Instagram's bot detection.
+
+        These are merged on top of the base options and override any
+        YouTube-specific settings that would be meaningless or harmful
+        for Instagram (e.g. player_client extractor args).
+        """
+        overrides: dict = {
+            # ── Identity ───────────────────────────────────────────────────
+            # Instagram fingerprints the default yt-dlp User-Agent and
+            # rejects it outright.  A real Chrome UA passes the check.
+            'user_agent': random.choice(_CHROME_USER_AGENTS),
+            'http_headers': {
+                'Referer': 'https://www.instagram.com/',
+                'Accept-Language': 'en-US,en;q=0.9',
+            },
+
+            # ── Rate-limiting / stealth ────────────────────────────────────
+            # Pause between metadata API calls to stay under the anonymous
+            # rate-limit window.
+            'sleep_requests': 1.5,
+            # Random pre-download delay (2-5 s) mimics a human clicking.
+            'sleep_interval': 2,
+            'max_sleep_interval': 5,
+
+            # ── Reliability ───────────────────────────────────────────────
+            # Instagram's CDN intermittently 403s; extra retries usually
+            # succeed on a different edge server.
+            'extractor_retries': 5,
+            'fragment_retries': 10,
+            'socket_timeout': 20,
+
+            # ── Remove YouTube-only options ───────────────────────────────
+            # geo_bypass / geo_bypass_country are YT-specific and can
+            # confuse other extractors; extractor_args with player_client
+            # is meaningless for Instagram.
+            'geo_bypass': False,
+        }
+
+        # Optional cookie file for authenticated downloads — lets the
+        # deployer use a burner account for higher reliability without
+        # code changes.
+        cookie_path = os.getenv('INSTAGRAM_COOKIES_FILE')
+        if cookie_path and os.path.isfile(cookie_path):
+            overrides['cookiefile'] = cookie_path
+            logger.info('Using Instagram cookie file for authenticated download')
+
+        return overrides
+
     async def get_video_info(self, url: str) -> VideoInfo:
         """Fetch video metadata without downloading"""
         # Normalize YouTube Shorts URLs
         url = normalize_youtube_url(url)
+
+        instagram = _is_instagram(url)
 
         ydl_opts = {
             'quiet': True,
@@ -78,14 +148,21 @@ class VideoConverter:
             'extract_flat': False,
             # Don't load/parse format list — we only need basic metadata
             'skip_download': True,
-            # Use mobile clients — they bypass bot checks fastest and don't
-            # need JS challenge solving (which adds several seconds).
-            'extractor_args': {'youtube': ['player_client=ios,android']},
             # Tight timeout for metadata-only fetch: fail fast and let the
             # caller show an error rather than waiting 20 s per retry.
             'socket_timeout': 10,
             'extractor_retries': 1,
         }
+
+        if instagram:
+            # Apply Instagram-specific anti-detection overrides
+            ydl_opts.update(self._instagram_overrides())
+            # Remove YouTube-only extractor args (not applicable)
+            ydl_opts.pop('extractor_args', None)
+        else:
+            # YouTube: use mobile clients — they bypass bot checks fastest
+            # and don't need JS challenge solving.
+            ydl_opts['extractor_args'] = {'youtube': ['player_client=ios,android']}
 
         def _fetch():
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -136,6 +213,9 @@ class VideoConverter:
 
         is_youtube = "youtube.com" in url or "youtu.be" in url
 
+
+        instagram = _is_instagram(url)
+
         base_opts = {
             # ── Output verbosity ───────────────────────────────────────────
             # Keep quiet=True so yt-dlp doesn't buffer large log strings in
@@ -158,10 +238,7 @@ class VideoConverter:
             'extractor_retries': 3,
             'fragment_retries': 10,
             'skip_unavailable_fragments': True,
-            'geo_bypass': True,
-            'geo_bypass_country': 'US',
             'socket_timeout': 30,
-            'extractor_args': {'youtube': ['player_client=ios,android,web']},
 
             # ── Metadata ───────────────────────────────────────────────────
             'add_metadata': True,
@@ -169,6 +246,18 @@ class VideoConverter:
                 'ffmpeg': ['-metadata', f'comment={website_url}']
             },
         }
+
+        if instagram:
+            # Merge Instagram anti-detection overrides on top of base_opts
+            base_opts.update(self._instagram_overrides())
+            # Ensure we don't send YouTube-only keys
+            base_opts.pop('extractor_args', None)
+            base_opts.pop('geo_bypass_country', None)
+        else:
+            # YouTube-specific options
+            base_opts['geo_bypass'] = True
+            base_opts['geo_bypass_country'] = 'US'
+            base_opts['extractor_args'] = {'youtube': ['player_client=ios,android,web']}
 
         if format_type in [FormatType.MP3, FormatType.MP3_48, FormatType.MP3_64,
                            FormatType.MP3_128, FormatType.MP3_240, FormatType.MP3_320]:
