@@ -188,6 +188,28 @@ class VideoConverter:
                 video_id=info.get('id', '')
             )
         except Exception as e:
+            if 'Pinterest' in str(e) and 'No video formats found' in str(e):
+                import requests
+                from bs4 import BeautifulSoup
+                try:
+                    headers = {'User-Agent': 'Mozilla/5.0'}
+                    r = requests.get(url, headers=headers, timeout=10)
+                    soup = BeautifulSoup(r.text, 'html.parser')
+                    og_image = soup.find('meta', property='og:image')
+                    og_title = soup.find('meta', property='og:title')
+                    if og_image:
+                        img_url = og_image['content'].replace('736x', 'originals')
+                        title = og_title['content'] if og_title else 'Pinterest Image'
+                        return VideoInfo(
+                            title=title,
+                            channel='Pinterest',
+                            duration=0,
+                            thumbnail=img_url,
+                            video_id='pinterest_image'
+                        )
+                except Exception as fallback_e:
+                    logger.error(f"Pinterest fallback failed: {fallback_e}")
+            
             logger.error(f"Error fetching video info: {e}")
             raise ValueError(f"Failed to fetch video info: {str(e)}")
 
@@ -420,7 +442,41 @@ class VideoConverter:
 
             # Run the blocking download/ffmpeg work in the bounded thread pool
             loop = asyncio.get_running_loop()
-            await loop.run_in_executor(_executor, self._download_video, url, ydl_opts)
+            try:
+                await loop.run_in_executor(_executor, self._download_video, url, ydl_opts)
+            except Exception as e:
+                if 'Pinterest' in str(e) and 'No video formats found' in str(e) and format_type in [FormatType.IMAGE_PNG, FormatType.IMAGE_JPG, FormatType.IMAGE_JPEG]:
+                    import requests
+                    from bs4 import BeautifulSoup
+                    
+                    headers = {'User-Agent': 'Mozilla/5.0'}
+                    r = requests.get(url, headers=headers, timeout=10)
+                    soup = BeautifulSoup(r.text, 'html.parser')
+                    og_image = soup.find('meta', property='og:image')
+                    if not og_image:
+                        raise ValueError("Could not extract image from Pinterest URL")
+                        
+                    img_url = og_image['content'].replace('736x', 'originals')
+                    
+                    # Target extension - always write as what yt-dlp would output (.png or .jpg)
+                    # The post-processing below will rename to .jpeg if needed
+                    target_ext = 'png' if format_type == FormatType.IMAGE_PNG else 'jpg'
+                        
+                    file_name = f"{job_id}.{target_ext}"
+                    file_path = self.download_dir / file_name
+                    
+                    img_data = requests.get(img_url, headers=headers, timeout=10).content
+                    
+                    if target_ext == 'png':
+                        from PIL import Image
+                        import io
+                        img = Image.open(io.BytesIO(img_data))
+                        img.save(file_path, format="PNG")
+                    else:
+                        with open(file_path, 'wb') as f:
+                            f.write(img_data)
+                else:
+                    raise e
 
             # Find the file yt-dlp wrote — it's named {job_id}.{ext}
             if format_type in [FormatType.IMAGE_PNG, FormatType.IMAGE_JPG, FormatType.IMAGE_JPEG]:
