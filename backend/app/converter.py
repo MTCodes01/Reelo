@@ -266,7 +266,7 @@ class VideoConverter:
             target_format = 'png' if format_type == FormatType.IMAGE_PNG else 'jpg'
             return {
                 **base_opts,
-                'format': 'bestaudio/best',
+                'skip_download': True,
                 'writethumbnail': True,
                 'postprocessors': [
                     {
