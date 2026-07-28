@@ -16,6 +16,9 @@ class FormatType(str, Enum):
     MP4_1080 = "mp4-1080"
     MP4_1440 = "mp4-1440"
     MP4_2160 = "mp4-2160"
+    IMAGE_PNG = "image-png"
+    IMAGE_JPG = "image-jpg"
+    IMAGE_JPEG = "image-jpeg"
 
 
 class ConvertRequest(BaseModel):

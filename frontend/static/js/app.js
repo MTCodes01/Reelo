@@ -20,6 +20,7 @@ const elements = {
     // Type & Formats
     audioFormats: document.getElementById('audio-formats'),
     videoFormats: document.getElementById('video-formats'),
+    imageFormats: document.getElementById('image-formats'),
     
     videoPreview: document.getElementById('video-preview'),
     previewThumb: document.getElementById('preview-thumb'),
@@ -77,7 +78,10 @@ function isValidUrl(url) {
         /^(https?:\/\/)?(www\.)?youtube\.com\/watch\?.*v=[\w-]+/,
         /^(https?:\/\/)?(www\.)?youtube\.com\/shorts\/[\w-]+/,
         /^(https?:\/\/)?(www\.)?youtube\.com\/live\/[\w-]+/,
-        /^(https?:\/\/)?(www\.)?instagram\.com\/(p|reel|tv)\/[\w-]+\/?/
+        /^(https?:\/\/)?(www\.)?instagram\.com\/(p|reel|tv)\/[\w-]+\/?/,
+        /^(https?:\/\/)?([a-z0-9-]+\.)?pinterest\.[a-z.]+\/pin\/[\w-]+\/?/,
+        /^(https?:\/\/)?pin\.it\/[\w-]+\/?/,
+        /^(https?:\/\/)?([a-z0-9-]+\.)?pinimg\.com\/.+/
     ];
     return patterns.some(pattern => pattern.test(url));
 }
@@ -146,7 +150,7 @@ function handleTypeSelect(e) {
     if (type === currentMode) return;
     
     // Update Type Buttons
-    document.querySelectorAll('[data-format="audio"], [data-format="video"]').forEach(b => {
+    document.querySelectorAll('[data-format="audio"], [data-format="video"], [data-format="image"]').forEach(b => {
         b.classList.remove('active');
     });
     btn.classList.add('active');
@@ -156,14 +160,21 @@ function handleTypeSelect(e) {
     // Toggle Format Containers
     if (type === 'audio') {
         elements.videoFormats.classList.add('hidden');
+        elements.imageFormats.classList.add('hidden');
         elements.audioFormats.classList.remove('hidden');
         // Set default audio format
         selectFormat('mp3-128');
-    } else {
+    } else if (type === 'video') {
         elements.audioFormats.classList.add('hidden');
+        elements.imageFormats.classList.add('hidden');
         elements.videoFormats.classList.remove('hidden');
         // Set default video format
         selectFormat('mp4-1080');
+    } else {
+        elements.audioFormats.classList.add('hidden');
+        elements.videoFormats.classList.add('hidden');
+        elements.imageFormats.classList.remove('hidden');
+        selectFormat('image-png');
     }
 }
 
@@ -171,7 +182,9 @@ function selectFormat(formatId) {
     selectedFormat = formatId;
     
     // Update active state in the visible container
-    const container = currentMode === 'audio' ? elements.audioFormats : elements.videoFormats;
+    let container = elements.audioFormats;
+    if (currentMode === 'video') container = elements.videoFormats;
+    if (currentMode === 'image') container = elements.imageFormats;
     const btns = container.querySelectorAll('.format-btn');
     
     btns.forEach(btn => {
@@ -339,7 +352,7 @@ async function handleConvert() {
     }
     
     if (!isValidUrl(url)) {
-        showError('Invalid URL. Please enter a valid YouTube or Instagram URL.');
+        showError('Invalid URL. Please enter a valid YouTube, Instagram, or Pinterest URL.');
         return;
     }
     
@@ -405,7 +418,7 @@ elements.convertAnotherBtn.addEventListener('click', handleConvertAnother);
 elements.tryAgainBtn.addEventListener('click', handleTryAgain);
 
 // Type Selection
-document.querySelectorAll('[data-format="audio"], [data-format="video"]').forEach(btn => {
+document.querySelectorAll('[data-format="audio"], [data-format="video"], [data-format="image"]').forEach(btn => {
     // Only attach to the type selector buttons, not format buttons
     if (btn.parentElement.parentElement.querySelector('.format-label').textContent.trim() === 'Type:') {
         btn.addEventListener('click', handleTypeSelect);
@@ -434,16 +447,27 @@ console.log('Reelo initialized');
 // Initialize UI state
 if (currentMode === 'audio') {
     elements.videoFormats.classList.add('hidden');
+    elements.imageFormats.classList.add('hidden');
     elements.audioFormats.classList.remove('hidden');
     // Ensure correct type button is active
     document.querySelector('[data-format="video"]').classList.remove('active');
+    document.querySelector('[data-format="image"]').classList.remove('active');
     document.querySelector('[data-format="audio"]').classList.add('active');
-} else {
+} else if (currentMode === 'video') {
     elements.audioFormats.classList.add('hidden');
+    elements.imageFormats.classList.add('hidden');
     elements.videoFormats.classList.remove('hidden');
     // Ensure correct type button is active
     document.querySelector('[data-format="audio"]').classList.remove('active');
+    document.querySelector('[data-format="image"]').classList.remove('active');
     document.querySelector('[data-format="video"]').classList.add('active');
+} else {
+    elements.audioFormats.classList.add('hidden');
+    elements.videoFormats.classList.add('hidden');
+    elements.imageFormats.classList.remove('hidden');
+    document.querySelector('[data-format="audio"]').classList.remove('active');
+    document.querySelector('[data-format="video"]').classList.remove('active');
+    document.querySelector('[data-format="image"]').classList.add('active');
 }
 // Set initial active format button
 selectFormat(selectedFormat);

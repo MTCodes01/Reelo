@@ -106,8 +106,18 @@ async def download_file(job_id: str):
     
     # Determine media type and create a better filename
     extension = file_path.suffix
-    media_type = "audio/mpeg" if extension == ".mp3" else "video/mp4"
-    
+    if extension == ".mp3":
+        media_type = "audio/mpeg"
+    elif extension == ".zip":
+        media_type = "application/zip"
+    elif extension in [".jpg", ".jpeg"]:
+        media_type = "image/jpeg"
+    elif extension == ".png":
+        media_type = "image/png"
+    elif extension == ".webp":
+        media_type = "image/webp"
+    else:
+        media_type = "video/mp4"
     # Create a better filename using video title if available
     if job.video_title:
         # Sanitize the title for filename (remove invalid characters)

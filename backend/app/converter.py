@@ -259,6 +259,25 @@ class VideoConverter:
             base_opts['geo_bypass_country'] = 'US'
             base_opts['extractor_args'] = {'youtube': ['player_client=ios,android,web']}
 
+        image_formats = [FormatType.IMAGE_PNG, FormatType.IMAGE_JPG, FormatType.IMAGE_JPEG]
+        if format_type in image_formats:
+            target_format = 'png' if format_type == FormatType.IMAGE_PNG else 'jpg'
+            return {
+                **base_opts,
+                'format': 'bestaudio/best',
+                'writethumbnail': True,
+                'postprocessors': [
+                    {
+                        'key': 'FFmpegThumbnailsConvertor',
+                        'format': target_format,
+                    },
+                    {
+                        'key': 'FFmpegMetadata',
+                        'add_metadata': True,
+                    }
+                ],
+            }
+
         if format_type in [FormatType.MP3, FormatType.MP3_48, FormatType.MP3_64,
                            FormatType.MP3_128, FormatType.MP3_240, FormatType.MP3_320]:
             # Determine bitrate based on format type
@@ -404,14 +423,44 @@ class VideoConverter:
             await loop.run_in_executor(_executor, self._download_video, url, ydl_opts)
 
             # Find the file yt-dlp wrote — it's named {job_id}.{ext}
-            expected_ext = '.mp3' if 'mp3' in format_type.value else '.mp4'
-            file_path = self._find_downloaded_file(job_id, expected_ext)
+            if format_type in [FormatType.IMAGE_PNG, FormatType.IMAGE_JPG, FormatType.IMAGE_JPEG]:
+                # Find all files belonging to this job
+                job_files = [f for f in self.download_dir.iterdir() if f.is_file() and f.name.startswith(job_id) and f.suffix != '.zip']
+                if not job_files:
+                    raise Exception("Downloaded files not found")
+                
+                # Rename .jpg to .jpeg if requested
+                if format_type == FormatType.IMAGE_JPEG:
+                    renamed_files = []
+                    for f in job_files:
+                        if f.suffix == '.jpg':
+                            new_path = f.with_suffix('.jpeg')
+                            f.rename(new_path)
+                            renamed_files.append(new_path)
+                        else:
+                            renamed_files.append(f)
+                    job_files = renamed_files
+                
+                if len(job_files) > 1:
+                    import zipfile
+                    zip_path = self.download_dir / f"{job_id}.zip"
+                    with zipfile.ZipFile(zip_path, 'w') as zipf:
+                        for i, f in enumerate(job_files):
+                            if f != zip_path:
+                                zipf.write(f, f"file_{i+1}{f.suffix}")
+                                f.unlink()
+                    file_path = zip_path
+                else:
+                    file_path = job_files[0]
+            else:
+                expected_ext = '.mp3' if 'mp3' in format_type.value else '.mp4'
+                file_path = self._find_downloaded_file(job_id, expected_ext)
 
-            if not file_path:
-                raise Exception("Downloaded file not found")
+                if not file_path:
+                    raise Exception("Downloaded file not found")
 
-            # Clean up any leftover thumbnail files
-            self._cleanup_thumbnails(job_id)
+                # Clean up any leftover thumbnail files
+                self._cleanup_thumbnails(job_id)
 
             # Update job with completion
             jobs[job_id].status = "completed"
