@@ -18,9 +18,10 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install runtime dependencies (ffmpeg)
+# Install runtime dependencies (ffmpeg and nodejs for JS challenges)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
+    nodejs \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy installed python packages from builder
