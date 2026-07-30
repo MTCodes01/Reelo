@@ -161,9 +161,8 @@ class VideoConverter:
             # Remove YouTube-only extractor args (not applicable)
             ydl_opts.pop('extractor_args', None)
         else:
-            # YouTube: use mobile clients — they bypass bot checks fastest
-            # and don't need JS challenge solving.
-            ydl_opts['extractor_args'] = {'youtube': ['player_client=ios,android']}
+            # YouTube: enable remote components for JS challenge solving
+            ydl_opts['remote_components'] = ['ejs:github']
 
         def _fetch():
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -259,7 +258,7 @@ class VideoConverter:
             # YouTube-specific options
             base_opts['geo_bypass'] = True
             base_opts['geo_bypass_country'] = 'US'
-            base_opts['extractor_args'] = {'youtube': ['player_client=ios,android,web']}
+            base_opts['remote_components'] = ['ejs:github']
 
         image_formats = [FormatType.IMAGE_PNG, FormatType.IMAGE_JPG, FormatType.IMAGE_JPEG]
         if format_type in image_formats:
