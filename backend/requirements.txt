@@ -8,4 +8,4 @@ pydantic-settings==2.12.0
 python-dotenv==1.2.1
 aiofiles==24.1.0
 Pillow==12.3.0
-# Force yt-dlp upgrade: 2026-07-30
+# Force yt-dlp upgrade: 2026-08-06
