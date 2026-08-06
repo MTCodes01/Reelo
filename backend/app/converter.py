@@ -257,8 +257,6 @@ class VideoConverter:
             base_opts.pop('geo_bypass_country', None)
         else:
             # YouTube-specific options
-            base_opts['geo_bypass'] = True
-            base_opts['geo_bypass_country'] = 'US'
             base_opts['remote_components'] = ['ejs:github']
             # Fallback to multiple clients to bypass datacenter IP blocks
             base_opts['extractor_args'] = {'youtube': ['player_client=web,android,ios,web_creator']}
