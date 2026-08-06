@@ -163,6 +163,7 @@ class VideoConverter:
         else:
             # YouTube: enable remote components for JS challenge solving
             ydl_opts['remote_components'] = ['ejs:github']
+            ydl_opts['extractor_args'] = {'youtube': ['player_client=web,android,ios,web_creator']}
 
         def _fetch():
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -259,6 +260,8 @@ class VideoConverter:
             base_opts['geo_bypass'] = True
             base_opts['geo_bypass_country'] = 'US'
             base_opts['remote_components'] = ['ejs:github']
+            # Fallback to multiple clients to bypass datacenter IP blocks
+            base_opts['extractor_args'] = {'youtube': ['player_client=web,android,ios,web_creator']}
 
         image_formats = [FormatType.IMAGE_PNG, FormatType.IMAGE_JPG, FormatType.IMAGE_JPEG]
         if format_type in image_formats:
