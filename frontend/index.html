@@ -1,234 +1,325 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-
-<head>
+  <head>
     <!-- Google tag (gtag.js) -->
-    <script async src="https://www.googletagmanager.com/gtag/js?id=G-SCYSYXHSHM"></script>
+    <script
+      async
+      src="https://www.googletagmanager.com/gtag/js?id=G-SCYSYXHSHM"
+    ></script>
     <script>
       window.dataLayer = window.dataLayer || [];
-      function gtag(){dataLayer.push(arguments);}
-      gtag('js', new Date());
+      function gtag() {
+        dataLayer.push(arguments);
+      }
+      gtag("js", new Date());
 
-      gtag('config', 'G-SCYSYXHSHM');
+      gtag("config", "G-SCYSYXHSHM");
     </script>
     <!-- End of Google tag (gtag.js) -->
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description"
-        content="Fast and free YouTube and Instagram video downloader. Convert to MP3 and MP4 in high quality.">
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Fast and free YouTube and Instagram video downloader. Convert to MP3 and MP4 in high quality."
+    />
     <title>Reelo - YT & Insta Converter</title>
-    <link rel="stylesheet" href="static/css/style.css?v=1.1">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-</head>
+    <link rel="stylesheet" href="static/css/style.css?v=1.1" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css"
+    />
+  </head>
 
-<body>
+  <body>
     <div class="background-gradient"></div>
 
     <div class="container">
-        <!-- Header -->
-        <header class="header">
-            <div class="logo">
-                <h1>Reelo - YT & Insta Converter</h1>
+      <!-- Header -->
+      <header class="header">
+        <div class="logo">
+          <h1>Reelo - YT & Insta Converter</h1>
+        </div>
+        <p class="tagline">Fast, Free, Unlimited</p>
+      </header>
+
+      <!-- Main Content -->
+      <main class="main-content">
+        <!-- Input Section -->
+        <section class="input-section">
+          <div class="input-wrapper">
+            <input
+              type="text"
+              id="youtube-url"
+              class="url-input"
+              placeholder="Paste YouTube, Instagram or Pinterest URL here..."
+              autocomplete="off"
+            />
+            <button
+              id="paste-btn"
+              class="paste-btn"
+              title="Paste from clipboard"
+            >
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <path
+                  d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"
+                />
+                <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
+              </svg>
+            </button>
+          </div>
+
+          <div class="format-selector">
+            <label class="format-label">Type:</label>
+            <div class="format-buttons" style="display: flex">
+              <button
+                class="format-btn active"
+                data-format="audio"
+                style="flex: 1"
+              >
+                MP3
+                <span style="font-size: 0.7em; font-weight: 400; opacity: 0.7"
+                  >Audio</span
+                >
+              </button>
+              <button class="format-btn" data-format="video" style="flex: 1">
+                MP4
+                <span style="font-size: 0.7em; font-weight: 400; opacity: 0.7"
+                  >Video</span
+                >
+              </button>
+              <button class="format-btn" data-format="image" style="flex: 1">
+                Image
+                <span style="font-size: 0.7em; font-weight: 400; opacity: 0.7"
+                  >Photo</span
+                >
+              </button>
             </div>
-            <p class="tagline">Fast, Free, Unlimited</p>
-        </header>
+          </div>
 
-        <!-- Main Content -->
-        <main class="main-content">
-            <!-- Input Section -->
-            <section class="input-section">
-                <div class="input-wrapper">
-                    <input type="text" id="youtube-url" class="url-input"
-                        placeholder="Paste YouTube, Instagram or Pinterest URL here..." autocomplete="off">
-                    <button id="paste-btn" class="paste-btn" title="Paste from clipboard">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2">
-                            <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
-                            <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
-                        </svg>
-                    </button>
-                </div>
-
-                <div class="format-selector">
-                    <label class="format-label">Type:</label>
-                    <div class="format-buttons" style="display: flex;">
-                        <button class="format-btn active" data-format="audio" style="flex: 1;">
-                            MP3
-                            <span style="font-size: 0.7em; font-weight: 400; opacity: 0.7">Audio</span>
-                        </button>
-                        <button class="format-btn" data-format="video" style="flex: 1;">
-                            MP4
-                            <span style="font-size: 0.7em; font-weight: 400; opacity: 0.7">Video</span>
-                        </button>
-                        <button class="format-btn" data-format="image" style="flex: 1;">
-                            Image
-                            <span style="font-size: 0.7em; font-weight: 400; opacity: 0.7">Photo</span>
-                        </button>
-                    </div>
-                </div>
-
-                <div class="format-selector active" id="audio-formats">
-                    <label class="format-label">Quality:</label>
-                    <div class="format-buttons" style="display: flex;">
-                        <button class="format-btn" data-format="mp3-48" style="flex: 1;">
-                            48kbps
-                            <span style="font-size: 0.7em; font-weight: 400; opacity: 0.7">MP3</span>
-                        </button>
-                        <button class="format-btn" data-format="mp3-64" style="flex: 1;">
-                            64kbps
-                            <span style="font-size: 0.7em; font-weight: 400; opacity: 0.7">MP3</span>
-                        </button>
-                        <button class="format-btn" data-format="mp3-128" style="flex: 1;">
-                            128kbps
-                            <span style="font-size: 0.7em; font-weight: 400; opacity: 0.7">MP3</span>
-                        </button>
-                        <button class="format-btn" data-format="mp3-320" style="flex: 1;">
-                            320kbps
-                            <span style="font-size: 0.7em; font-weight: 400; opacity: 0.7">MP3</span>
-                        </button>
-                    </div>
-                </div>
-
-                <div class="format-selector hidden" id="video-formats">
-                    <label class="format-label">Quality:</label>
-                    <div class="format-buttons" style="display: flex;">
-                        <button class="format-btn" data-format="mp4-360" style="flex: 1;">
-                            360p
-                            <span style="font-size: 0.7em; font-weight: 400; opacity: 0.7">MP4</span>
-                        </button>
-                        <button class="format-btn" data-format="mp4-720" style="flex: 1;">
-                            720p
-                            <span style="font-size: 0.7em; font-weight: 400; opacity: 0.7">HD</span>
-                        </button>
-                        <button class="format-btn" data-format="mp4-1080" style="flex: 1;">
-                            1080p
-                            <span style="font-size: 0.7em; font-weight: 400; opacity: 0.7">FHD</span>
-                        </button>
-                        <button class="format-btn" data-format="mp4-1440" style="flex: 1;">
-                            1440p
-                            <span style="font-size: 0.7em; font-weight: 400; opacity: 0.7">QHD</span>
-                        </button>
-                        <button class="format-btn" data-format="mp4-2160" style="flex: 1;">
-                            2160p
-                            <span style="font-size: 0.7em; font-weight: 400; opacity: 0.7">4K</span>
-                        </button>
-                    </div>
-                </div>
-
-                <div class="format-selector hidden" id="image-formats">
-                    <label class="format-label">Format:</label>
-                    <div class="format-buttons" style="display: flex;">
-                        <button class="format-btn active" data-format="image-png" style="flex: 1;">
-                            PNG
-                            <span style="font-size: 0.7em; font-weight: 400; opacity: 0.7">High Quality</span>
-                        </button>
-                        <button class="format-btn" data-format="image-jpg" style="flex: 1;">
-                            JPG
-                            <span style="font-size: 0.7em; font-weight: 400; opacity: 0.7">Compressed</span>
-                        </button>
-                        <button class="format-btn" data-format="image-jpeg" style="flex: 1;">
-                            JPEG
-                            <span style="font-size: 0.7em; font-weight: 400; opacity: 0.7">Compressed</span>
-                        </button>
-                    </div>
-                </div>
-
-                <button id="convert-btn" class="convert-btn">
-                    <span class="btn-text">Convert</span>
-                    <div class="btn-loader"></div>
-                </button>
-            </section>
-
-            <!-- Video Preview Section -->
-            <section id="video-preview" class="video-preview hidden">
-                <div class="preview-card">
-                    <div class="preview-thumbnail">
-                        <img id="preview-thumb" src="" alt="Video thumbnail">
-                        <div class="preview-duration" id="preview-duration"></div>
-                    </div>
-                    <div class="preview-info">
-                        <h3 id="preview-title" class="preview-title"></h3>
-                        <p id="preview-channel" class="preview-channel"></p>
-                    </div>
-                </div>
-            </section>
-
-            <!-- Progress Section -->
-            <section id="progress-section" class="progress-section hidden">
-                <div class="progress-card">
-                    <div class="progress-header">
-                        <span id="progress-status">Processing...</span>
-                        <span id="progress-percent">0%</span>
-                    </div>
-                    <div class="progress-bar">
-                        <div id="progress-fill" class="progress-fill"></div>
-                    </div>
-                </div>
-            </section>
-
-            <!-- Download Section -->
-            <section id="download-section" class="download-section hidden">
-                <div class="download-card">
-                    <button id="download-btn" class="download-btn">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2">
-                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                            <polyline points="7 10 12 15 17 10" />
-                            <line x1="12" y1="15" x2="12" y2="3" />
-                        </svg>
-                        Download File
-                    </button>
-                    <button id="convert-another" class="convert-another-btn">Convert Another</button>
-                </div>
-            </section>
-
-            <!-- Error Section -->
-            <section id="error-section" class="error-section hidden">
-                <div class="error-card">
-                    <div class="error-icon">
-                        <svg width="60" height="60" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2">
-                            <circle cx="12" cy="12" r="10" />
-                            <line x1="12" y1="8" x2="12" y2="12" />
-                            <line x1="12" y1="16" x2="12.01" y2="16" />
-                        </svg>
-                    </div>
-                    <h3>Oops! Something went wrong</h3>
-                    <p id="error-message" class="error-message"></p>
-                    <button id="try-again-btn" class="try-again-btn">Try Again</button>
-                </div>
-            </section>
-        </main>
-
-        <!-- Features Section -->
-        <section class="features">
-            <div class="feature-card">
-                <div class="feature-icon">🔄</div>
-                <h3>MP3 & MP4 Conversion</h3>
-                <p>Convert videos to high-quality audio or video formats</p>
+          <div class="format-selector active" id="audio-formats">
+            <label class="format-label">Quality:</label>
+            <div class="format-buttons" style="display: flex">
+              <button class="format-btn" data-format="mp3-48" style="flex: 1">
+                48kbps
+                <span style="font-size: 0.7em; font-weight: 400; opacity: 0.7"
+                  >MP3</span
+                >
+              </button>
+              <button class="format-btn" data-format="mp3-64" style="flex: 1">
+                64kbps
+                <span style="font-size: 0.7em; font-weight: 400; opacity: 0.7"
+                  >MP3</span
+                >
+              </button>
+              <button class="format-btn" data-format="mp3-128" style="flex: 1">
+                128kbps
+                <span style="font-size: 0.7em; font-weight: 400; opacity: 0.7"
+                  >MP3</span
+                >
+              </button>
+              <button class="format-btn" data-format="mp3-320" style="flex: 1">
+                320kbps
+                <span style="font-size: 0.7em; font-weight: 400; opacity: 0.7"
+                  >MP3</span
+                >
+              </button>
             </div>
-            <div class="feature-card">
-                <div class="feature-icon">✨</div>
-                <h3>Multiple Quality Options</h3>
-                <p>Choose from various resolutions and bitrates for your downloads</p>
+          </div>
+
+          <div class="format-selector hidden" id="video-formats">
+            <label class="format-label">Quality:</label>
+            <div class="format-buttons" style="display: flex">
+              <button class="format-btn" data-format="mp4-360" style="flex: 1">
+                360p
+                <span style="font-size: 0.7em; font-weight: 400; opacity: 0.7"
+                  >MP4</span
+                >
+              </button>
+              <button class="format-btn" data-format="mp4-720" style="flex: 1">
+                720p
+                <span style="font-size: 0.7em; font-weight: 400; opacity: 0.7"
+                  >HD</span
+                >
+              </button>
+              <button class="format-btn" data-format="mp4-1080" style="flex: 1">
+                1080p
+                <span style="font-size: 0.7em; font-weight: 400; opacity: 0.7"
+                  >FHD</span
+                >
+              </button>
+              <button class="format-btn" data-format="mp4-1440" style="flex: 1">
+                1440p
+                <span style="font-size: 0.7em; font-weight: 400; opacity: 0.7"
+                  >QHD</span
+                >
+              </button>
+              <button class="format-btn" data-format="mp4-2160" style="flex: 1">
+                2160p
+                <span style="font-size: 0.7em; font-weight: 400; opacity: 0.7"
+                  >4K</span
+                >
+              </button>
             </div>
-            <div class="feature-card">
-                <div class="feature-icon">⏱️</div>
-                <h3>1-Hour Auto Delete</h3>
-                <p>Downloads are automatically deleted after 1 hour for privacy</p>
+          </div>
+
+          <div class="format-selector hidden" id="image-formats">
+            <label class="format-label">Format:</label>
+            <div class="format-buttons" style="display: flex">
+              <button
+                class="format-btn active"
+                data-format="image-png"
+                style="flex: 1"
+              >
+                PNG
+                <span style="font-size: 0.7em; font-weight: 400; opacity: 0.7"
+                  >High Quality</span
+                >
+              </button>
+              <button
+                class="format-btn"
+                data-format="image-jpg"
+                style="flex: 1"
+              >
+                JPG
+                <span style="font-size: 0.7em; font-weight: 400; opacity: 0.7"
+                  >Compressed</span
+                >
+              </button>
+              <button
+                class="format-btn"
+                data-format="image-jpeg"
+                style="flex: 1"
+              >
+                JPEG
+                <span style="font-size: 0.7em; font-weight: 400; opacity: 0.7"
+                  >Compressed</span
+                >
+              </button>
             </div>
+          </div>
+
+          <button id="convert-btn" class="convert-btn">
+            <span class="btn-text">Convert</span>
+            <div class="btn-loader"></div>
+          </button>
         </section>
 
-        <!-- Footer -->
-        <footer class="footer">
-            <p>&copy; 2026 Reelo. For personal use only.</p>
-            <p class="disclaimer">This tool is for downloading videos you have permission to download.</p>
-        </footer>
+        <!-- Video Preview Section -->
+        <section id="video-preview" class="video-preview hidden">
+          <div class="preview-card">
+            <div class="preview-thumbnail">
+              <img id="preview-thumb" src="" alt="Video thumbnail" />
+              <div class="preview-duration" id="preview-duration"></div>
+            </div>
+            <div class="preview-info">
+              <h3 id="preview-title" class="preview-title"></h3>
+              <p id="preview-channel" class="preview-channel"></p>
+            </div>
+          </div>
+        </section>
+
+        <!-- Progress Section -->
+        <section id="progress-section" class="progress-section hidden">
+          <div class="progress-card">
+            <div class="progress-header">
+              <span id="progress-status">Processing...</span>
+              <span id="progress-percent">0%</span>
+            </div>
+            <div class="progress-bar">
+              <div id="progress-fill" class="progress-fill"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Download Section -->
+        <section id="download-section" class="download-section hidden">
+          <div class="download-card">
+            <button id="download-btn" class="download-btn">
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="7 10 12 15 17 10" />
+                <line x1="12" y1="15" x2="12" y2="3" />
+              </svg>
+              Download File
+            </button>
+            <button id="convert-another" class="convert-another-btn">
+              Convert Another
+            </button>
+          </div>
+        </section>
+
+        <!-- Error Section -->
+        <section id="error-section" class="error-section hidden">
+          <div class="error-card">
+            <div class="error-icon">
+              <svg
+                width="60"
+                height="60"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <circle cx="12" cy="12" r="10" />
+                <line x1="12" y1="8" x2="12" y2="12" />
+                <line x1="12" y1="16" x2="12.01" y2="16" />
+              </svg>
+            </div>
+            <h3>Oops! Something went wrong</h3>
+            <p id="error-message" class="error-message"></p>
+            <button id="try-again-btn" class="try-again-btn">Try Again</button>
+          </div>
+        </section>
+      </main>
+
+      <!-- Features Section -->
+      <section class="features">
+        <div class="feature-card">
+          <div class="feature-icon"><i class="fa-solid fa-right-left"></i></div>
+          <h3>MP3 & MP4 Conversion</h3>
+          <p>Convert videos to high-quality audio or video formats</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon"><i class="fa-solid fa-sliders"></i></div>
+          <h3>Multiple Quality Options</h3>
+          <p>Choose from various resolutions and bitrates for your downloads</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon"><i class="fa-regular fa-clock"></i></div>
+          <h3>1-Hour Auto Delete</h3>
+          <p>Downloads are automatically deleted after 1 hour for privacy</p>
+        </div>
+      </section>
+
+      <!-- Footer -->
+      <footer class="footer">
+        <p>&copy; 2026 Reelo. For personal use only.</p>
+        <p class="disclaimer">
+          This tool is for downloading videos you have permission to download.
+        </p>
+      </footer>
     </div>
 
     <script src="static/js/app.js?v=1.1"></script>
-</body>
-
+  </body>
 </html>
