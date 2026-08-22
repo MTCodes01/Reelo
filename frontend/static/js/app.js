@@ -204,52 +204,31 @@ function handleFormatSelect(e) {
 // ==================== API Functions ====================
 async function fetchVideoInfo(url) {
     try {
-        const response = await fetch(`${API_BASE_URL}/info?url=${encodeURIComponent(url)}`);
-        
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.detail || 'Failed to fetch video info');
-        }
-        
-        return await response.json();
+        const response = await axios.get(`${API_BASE_URL}/info?url=${encodeURIComponent(url)}`);
+        return response.data;
     } catch (error) {
-        throw new Error(error.message || 'Network error. Please check your connection.');
+        const detail = error.response?.data?.detail || error.message || 'Network error. Please check your connection.';
+        throw new Error(detail);
     }
 }
 
 async function startConversion(url, format) {
     try {
-        const response = await fetch(`${API_BASE_URL}/convert`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ url, format })
-        });
-        
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.detail || 'Failed to start conversion');
-        }
-        
-        return await response.json();
+        const response = await axios.post(`${API_BASE_URL}/convert`, { url, format });
+        return response.data;
     } catch (error) {
-        throw new Error(error.message || 'Network error. Please check your connection.');
+        const detail = error.response?.data?.detail || error.message || 'Network error. Please check your connection.';
+        throw new Error(detail);
     }
 }
 
 async function checkJobStatus(jobId) {
     try {
-        const response = await fetch(`${API_BASE_URL}/status/${jobId}`);
-        
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.detail || 'Failed to check status');
-        }
-        
-        return await response.json();
+        const response = await axios.get(`${API_BASE_URL}/status/${jobId}`);
+        return response.data;
     } catch (error) {
-        throw new Error(error.message || 'Network error. Please check your connection.');
+        const detail = error.response?.data?.detail || error.message || 'Network error. Please check your connection.';
+        throw new Error(detail);
     }
 }
 
