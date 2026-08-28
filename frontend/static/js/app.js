@@ -68,14 +68,20 @@ function normalizeYouTubeUrl(url) {
         const protocol = hasProtocol ? '' : 'https://';
         return `${protocol}www.youtube.com/watch?v=${videoId}`;
     }
+
+    // Convert YouTube Music URLs to standard watch URLs
+    // Example: music.youtube.com/watch?v=... -> www.youtube.com/watch?v=...
+    if (url.includes('music.youtube.com')) {
+        return url.replace('music.youtube.com', 'www.youtube.com');
+    }
     
     return url;
 }
 
 function isValidUrl(url) {
     const patterns = [
-        /^(https?:\/\/)?(www\.)?(youtube\.com\/watch\?v=|youtu\.be\/)[\w-]+/,
-        /^(https?:\/\/)?(www\.)?youtube\.com\/watch\?.*v=[\w-]+/,
+        /^(https?:\/\/)?(www\.|music\.)?(youtube\.com\/watch\?v=|youtu\.be\/)[\w-]+/,
+        /^(https?:\/\/)?(www\.|music\.)?youtube\.com\/watch\?.*v=[\w-]+/,
         /^(https?:\/\/)?(www\.)?youtube\.com\/shorts\/[\w-]+/,
         /^(https?:\/\/)?(www\.)?youtube\.com\/live\/[\w-]+/,
         /^(https?:\/\/)?(www\.)?instagram\.com\/(p|reel|tv)\/[\w-]+\/?/,
