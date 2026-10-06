@@ -332,12 +332,12 @@ async function handleConvert() {
     
     // Validate URL
     if (!url) {
-        showError('Please enter a YouTube URL');
+        showError('Please enter a Proper URL');
         return;
     }
     
     if (!isValidUrl(url)) {
-        showError('Invalid URL. Please enter a valid YouTube, Instagram, or Pinterest URL.');
+        showError('1D-10T Error. Please enter a valid YouTube, Instagram, or Pinterest URL.');
         return;
     }
     
