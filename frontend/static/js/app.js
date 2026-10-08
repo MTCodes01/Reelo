@@ -456,3 +456,19 @@ if (currentMode === 'audio') {
 }
 // Set initial active format button
 selectFormat(selectedFormat);
+
+
+onload = (event) => {
+
+    registerService()
+    if (!navigator.onLine) {
+        document.getElementById("offlineA").style.display = "flex"
+
+    }checkSize()
+};
+
+function registerService() {
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register("/static/js/serviceworker.js");
+    }
+}
