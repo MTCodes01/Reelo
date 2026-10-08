@@ -456,3 +456,29 @@ if (currentMode === 'audio') {
 }
 // Set initial active format button
 selectFormat(selectedFormat);
+
+
+function registerService() {
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register("/static/js/sw.js");
+    }
+}
+
+
+let installPrompt = null;
+
+window.addEventListener("beforeinstallprompt", (event) => {
+  event.preventDefault();
+  installPrompt = event;
+});
+
+
+window.addEventListener('DOMContentLoaded', async() => {
+    if (!installPrompt) {
+    return;
+  }
+  const result = await installPrompt.prompt();
+  installPrompt = null;
+    registerService()
+
+})
