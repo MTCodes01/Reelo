@@ -458,17 +458,27 @@ if (currentMode === 'audio') {
 selectFormat(selectedFormat);
 
 
-onload = (event) => {
-
-    registerService()
-    if (!navigator.onLine) {
-        document.getElementById("offlineA").style.display = "flex"
-
-    }checkSize()
-};
-
 function registerService() {
     if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register("/static/js/serviceworker.js");
+        navigator.serviceWorker.register("/static/js/sw.js");
     }
 }
+
+
+let installPrompt = null;
+
+window.addEventListener("beforeinstallprompt", (event) => {
+  event.preventDefault();
+  installPrompt = event;
+});
+
+
+window.addEventListener('DOMContentLoaded', async() => {
+    if (!installPrompt) {
+    return;
+  }
+  const result = await installPrompt.prompt();
+  installPrompt = null;
+    registerService()
+
+})
