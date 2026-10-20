@@ -11,6 +11,17 @@ let pollTimeoutTimer = null; // hard-stop handle
 let selectedFormat = 'mp3-128'; // Default
 let currentMode = 'audio';
 
+let trimState = {
+    isOpen: false,
+    isEnabled: true,
+    startTime: 0,
+    endTime: 0,
+    duration: 0,
+    sourceUrl: '',
+    cachedVideoInfo: null,
+    isDragging: null // 'start' | 'end' | null
+};
+
 // ==================== DOM Elements ====================
 const elements = {
     urlInput: document.getElementById('youtube-url'),
@@ -21,6 +32,32 @@ const elements = {
     audioFormats: document.getElementById('audio-formats'),
     videoFormats: document.getElementById('video-formats'),
     imageFormats: document.getElementById('image-formats'),
+
+    // Trim Controls
+    trimToggleAudio: document.getElementById('trim-toggle-audio'),
+    trimToggleVideo: document.getElementById('trim-toggle-video'),
+    trimIndicatorDots: document.querySelectorAll('.trim-indicator-dot'),
+    trimBadges: document.querySelectorAll('.trim-badge'),
+    
+    trimSection: document.getElementById('trim-section'),
+    trimDurationBadge: document.getElementById('trim-duration-badge'),
+    trimEnableToggle: document.getElementById('trim-enable-toggle'),
+    trimResetBtn: document.getElementById('trim-reset-btn'),
+    
+    trimTimeline: document.getElementById('trim-timeline'),
+    trimTrackHighlight: document.getElementById('trim-track-highlight'),
+    trimHandleStart: document.getElementById('trim-handle-start'),
+    trimHandleEnd: document.getElementById('trim-handle-end'),
+    trimTooltipStart: document.getElementById('trim-tooltip-start'),
+    trimTooltipEnd: document.getElementById('trim-tooltip-end'),
+    
+    trimTimelineStartLabel: document.getElementById('trim-timeline-start-label'),
+    trimTimelineEndLabel: document.getElementById('trim-timeline-end-label'),
+    trimTimelineStatus: document.getElementById('trim-timeline-status'),
+    
+    trimStartInput: document.getElementById('trim-start-input'),
+    trimEndInput: document.getElementById('trim-end-input'),
+    trimValidationMsg: document.getElementById('trim-validation-msg'),
     
     videoPreview: document.getElementById('video-preview'),
     previewThumb: document.getElementById('preview-thumb'),
@@ -118,6 +155,204 @@ function formatDuration(seconds) {
     return `${minutes}:${secs.toString().padStart(2, '0')}`;
 }
 
+function formatTimestamp(seconds) {
+    seconds = Math.max(0, Math.round(seconds || 0));
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+    
+    if (hours > 0) {
+        return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    }
+    return `${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+}
+
+function parseTimestamp(str) {
+    if (typeof str !== 'string') return null;
+    str = str.trim();
+    if (!str) return null;
+    
+    // Check if simple integer or float seconds (e.g. "45" or "45.5")
+    if (/^\d+(\.\d+)?$/.test(str)) {
+        return Math.floor(parseFloat(str));
+    }
+    
+    // Check MM:SS or HH:MM:SS
+    const parts = str.split(':').map(Number);
+    if (parts.some(isNaN)) return null;
+    
+    if (parts.length === 2) {
+        const [m, s] = parts;
+        if (s < 0 || s >= 60 || m < 0) return null;
+        return m * 60 + s;
+    } else if (parts.length === 3) {
+        const [h, m, s] = parts;
+        if (s < 0 || s >= 60 || m < 0 || m >= 60 || h < 0) return null;
+        return h * 3600 + m * 60 + s;
+    }
+    return null;
+}
+
+function showTrimError(msg) {
+    if (elements.trimValidationMsg) {
+        elements.trimValidationMsg.innerHTML = `<i class="fa-solid fa-circle-exclamation"></i> ${msg}`;
+        elements.trimValidationMsg.classList.remove('hidden');
+    }
+}
+
+function clearTrimError() {
+    if (elements.trimValidationMsg) {
+        elements.trimValidationMsg.textContent = '';
+        elements.trimValidationMsg.classList.add('hidden');
+    }
+    if (elements.trimStartInput) elements.trimStartInput.classList.remove('error');
+    if (elements.trimEndInput) elements.trimEndInput.classList.remove('error');
+}
+
+function updateTrimUI() {
+    const duration = trimState.duration;
+    
+    if (duration > 0) {
+        // Clamp bounds
+        trimState.startTime = Math.max(0, Math.min(trimState.startTime, duration - 1));
+        trimState.endTime = Math.max(trimState.startTime + 1, Math.min(trimState.endTime, duration));
+        
+        const startPct = (trimState.startTime / duration) * 100;
+        const endPct = (trimState.endTime / duration) * 100;
+        
+        if (elements.trimHandleStart) elements.trimHandleStart.style.left = `${startPct}%`;
+        if (elements.trimHandleEnd) elements.trimHandleEnd.style.left = `${endPct}%`;
+        if (elements.trimTrackHighlight) {
+            elements.trimTrackHighlight.style.left = `${startPct}%`;
+            elements.trimTrackHighlight.style.width = `${Math.max(0, endPct - startPct)}%`;
+        }
+        
+        if (elements.trimTooltipStart) elements.trimTooltipStart.textContent = formatTimestamp(trimState.startTime);
+        if (elements.trimTooltipEnd) elements.trimTooltipEnd.textContent = formatTimestamp(trimState.endTime);
+        
+        if (elements.trimTimelineStartLabel) elements.trimTimelineStartLabel.textContent = formatTimestamp(0);
+        if (elements.trimTimelineEndLabel) elements.trimTimelineEndLabel.textContent = formatTimestamp(duration);
+        
+        // Update input boxes if not currently focused
+        if (elements.trimStartInput && document.activeElement !== elements.trimStartInput) {
+            elements.trimStartInput.value = formatTimestamp(trimState.startTime);
+        }
+        if (elements.trimEndInput && document.activeElement !== elements.trimEndInput) {
+            elements.trimEndInput.value = formatTimestamp(trimState.endTime);
+        }
+        
+        // ARIA attributes
+        if (elements.trimHandleStart) {
+            elements.trimHandleStart.setAttribute('aria-valuenow', trimState.startTime);
+            elements.trimHandleStart.setAttribute('aria-valuemax', trimState.endTime - 1);
+        }
+        if (elements.trimHandleEnd) {
+            elements.trimHandleEnd.setAttribute('aria-valuenow', trimState.endTime);
+            elements.trimHandleEnd.setAttribute('aria-valuemin', trimState.startTime + 1);
+            elements.trimHandleEnd.setAttribute('aria-valuemax', duration);
+        }
+        
+        const clipLen = trimState.endTime - trimState.startTime;
+        const isTrimActive = trimState.isEnabled && (trimState.startTime > 0 || trimState.endTime < duration);
+        
+        if (isTrimActive) {
+            if (elements.trimDurationBadge) elements.trimDurationBadge.textContent = `Clip: ${formatTimestamp(clipLen)}`;
+            if (elements.trimTimelineStatus) elements.trimTimelineStatus.textContent = `Clip Length: ${formatTimestamp(clipLen)} (${clipLen}s)`;
+            
+            elements.trimIndicatorDots.forEach(dot => dot.classList.remove('hidden'));
+            elements.trimBadges.forEach(badge => {
+                badge.textContent = formatTimestamp(clipLen);
+                badge.classList.remove('hidden');
+            });
+            if (elements.trimToggleAudio) elements.trimToggleAudio.classList.add('active-trim');
+            if (elements.trimToggleVideo) elements.trimToggleVideo.classList.add('active-trim');
+        } else {
+            if (elements.trimDurationBadge) elements.trimDurationBadge.textContent = `Full: ${formatTimestamp(duration)}`;
+            if (elements.trimTimelineStatus) elements.trimTimelineStatus.textContent = 'Full Video';
+            
+            elements.trimIndicatorDots.forEach(dot => dot.classList.add('hidden'));
+            elements.trimBadges.forEach(badge => badge.classList.add('hidden'));
+            if (elements.trimToggleAudio) elements.trimToggleAudio.classList.remove('active-trim');
+            if (elements.trimToggleVideo) elements.trimToggleVideo.classList.remove('active-trim');
+        }
+    } else {
+        // No metadata yet
+        if (elements.trimHandleStart) elements.trimHandleStart.style.left = '0%';
+        if (elements.trimHandleEnd) elements.trimHandleEnd.style.left = '100%';
+        if (elements.trimTrackHighlight) {
+            elements.trimTrackHighlight.style.left = '0%';
+            elements.trimTrackHighlight.style.width = '100%';
+        }
+        
+        if (elements.trimTooltipStart) elements.trimTooltipStart.textContent = '00:00';
+        if (elements.trimTooltipEnd) elements.trimTooltipEnd.textContent = '--:--';
+        if (elements.trimTimelineStartLabel) elements.trimTimelineStartLabel.textContent = '00:00';
+        if (elements.trimTimelineEndLabel) elements.trimTimelineEndLabel.textContent = '--:--';
+        if (elements.trimTimelineStatus) elements.trimTimelineStatus.textContent = 'Paste video URL to load length';
+        if (elements.trimDurationBadge) elements.trimDurationBadge.textContent = 'Full Video';
+        
+        elements.trimIndicatorDots.forEach(dot => dot.classList.add('hidden'));
+        elements.trimBadges.forEach(badge => badge.classList.add('hidden'));
+        if (elements.trimToggleAudio) elements.trimToggleAudio.classList.remove('active-trim');
+        if (elements.trimToggleVideo) elements.trimToggleVideo.classList.remove('active-trim');
+    }
+    
+    // Sync open state styling
+    if (elements.trimToggleAudio) {
+        if (trimState.isOpen) elements.trimToggleAudio.classList.add('open');
+        else elements.trimToggleAudio.classList.remove('open');
+    }
+    if (elements.trimToggleVideo) {
+        if (trimState.isOpen) elements.trimToggleVideo.classList.add('open');
+        else elements.trimToggleVideo.classList.remove('open');
+    }
+}
+
+function toggleTrimSection() {
+    trimState.isOpen = !trimState.isOpen;
+    if (trimState.isOpen) {
+        elements.trimSection.classList.remove('hidden');
+        const url = elements.urlInput.value.trim();
+        if (url && isValidUrl(url) && trimState.duration === 0) {
+            loadVideoMetadata(url);
+        }
+    } else {
+        elements.trimSection.classList.add('hidden');
+    }
+    updateTrimUI();
+}
+
+async function loadVideoMetadata(url, force = false) {
+    url = normalizeYouTubeUrl(url.trim());
+    if (!isValidUrl(url)) return;
+    if (!force && trimState.sourceUrl === url && trimState.duration > 0) return;
+    
+    try {
+        const isNewUrl = trimState.sourceUrl !== url;
+        trimState.sourceUrl = url;
+        
+        const videoInfo = await fetchVideoInfo(url);
+        trimState.cachedVideoInfo = videoInfo;
+        displayVideoPreview(videoInfo);
+        
+        const videoDuration = Math.max(1, Math.round(videoInfo.duration || 0));
+        trimState.duration = videoDuration;
+        
+        // If this is a new video or range uninitialized, default to full range
+        if (isNewUrl || (trimState.startTime === 0 && trimState.endTime === 0)) {
+            trimState.startTime = 0;
+            trimState.endTime = videoDuration;
+        } else if (trimState.endTime > videoDuration) {
+            trimState.endTime = videoDuration;
+        }
+        
+        clearTrimError();
+        updateTrimUI();
+    } catch (err) {
+        console.warn('Metadata fetch note:', err.message);
+    }
+}
+
 function showSection(section) {
     // Hide all sections
     elements.videoPreview.classList.add('hidden');
@@ -151,7 +386,7 @@ function showError(message) {
 // ==================== UI Logic ====================
 function handleTypeSelect(e) {
     const btn = e.currentTarget;
-    const type = btn.dataset.format; // 'audio' or 'video'
+    const type = btn.dataset.format; // 'audio', 'video', or 'image'
     
     if (type === currentMode) return;
     
@@ -168,18 +403,30 @@ function handleTypeSelect(e) {
         elements.videoFormats.classList.add('hidden');
         elements.imageFormats.classList.add('hidden');
         elements.audioFormats.classList.remove('hidden');
+        // Restore trimming controls if open
+        if (trimState.isOpen) {
+            elements.trimSection.classList.remove('hidden');
+        }
+        updateTrimUI();
         // Set default audio format
         selectFormat('mp3-128');
     } else if (type === 'video') {
         elements.audioFormats.classList.add('hidden');
         elements.imageFormats.classList.add('hidden');
         elements.videoFormats.classList.remove('hidden');
+        // Restore trimming controls if open
+        if (trimState.isOpen) {
+            elements.trimSection.classList.remove('hidden');
+        }
+        updateTrimUI();
         // Set default video format
         selectFormat('mp4-1080');
     } else {
+        // Image format: hide trimming controls completely
         elements.audioFormats.classList.add('hidden');
         elements.videoFormats.classList.add('hidden');
         elements.imageFormats.classList.remove('hidden');
+        elements.trimSection.classList.add('hidden');
         selectFormat('image-png');
     }
 }
@@ -218,9 +465,14 @@ async function fetchVideoInfo(url) {
     }
 }
 
-async function startConversion(url, format) {
+async function startConversion(url, format, startTime = null, endTime = null) {
     try {
-        const response = await axios.post(`${API_BASE_URL}/convert`, { url, format });
+        const payload = { url, format };
+        if (startTime !== null && endTime !== null) {
+            payload.start_time = startTime;
+            payload.end_time = endTime;
+        }
+        const response = await axios.post(`${API_BASE_URL}/convert`, payload);
         return response.data;
     } catch (error) {
         const detail = error.response?.data?.detail || error.message || 'Network error. Please check your connection.';
@@ -316,12 +568,220 @@ function startProgressPolling(jobId) {
     pollTimer = setTimeout(poll, delay);
 }
 
+// ==================== Timeline Drag & Interactions ====================
+function initTimelineDrag() {
+    function getEventClientX(e) {
+        if (e.touches && e.touches.length > 0) {
+            return e.touches[0].clientX;
+        }
+        return e.clientX;
+    }
+
+    function onPointerDown(handleType, e) {
+        if (trimState.duration <= 0) return;
+        e.preventDefault();
+        trimState.isDragging = handleType;
+        if (handleType === 'start') {
+            elements.trimHandleStart.classList.add('dragging');
+        } else {
+            elements.trimHandleEnd.classList.add('dragging');
+        }
+        clearTrimError();
+    }
+
+    if (elements.trimHandleStart) {
+        elements.trimHandleStart.addEventListener('mousedown', (e) => onPointerDown('start', e));
+        elements.trimHandleStart.addEventListener('touchstart', (e) => onPointerDown('start', e), { passive: false });
+    }
+    
+    if (elements.trimHandleEnd) {
+        elements.trimHandleEnd.addEventListener('mousedown', (e) => onPointerDown('end', e));
+        elements.trimHandleEnd.addEventListener('touchstart', (e) => onPointerDown('end', e), { passive: false });
+    }
+
+    function onPointerMove(e) {
+        if (!trimState.isDragging || trimState.duration <= 0) return;
+        
+        const clientX = getEventClientX(e);
+        const rect = elements.trimTimeline.getBoundingClientRect();
+        const offsetX = Math.max(0, Math.min(rect.width, clientX - rect.left));
+        const ratio = offsetX / rect.width;
+        let time = Math.round(ratio * trimState.duration);
+        
+        if (trimState.isDragging === 'start') {
+            time = Math.max(0, Math.min(trimState.endTime - 1, time));
+            trimState.startTime = time;
+        } else if (trimState.isDragging === 'end') {
+            time = Math.max(trimState.startTime + 1, Math.min(trimState.duration, time));
+            trimState.endTime = time;
+        }
+        
+        updateTrimUI();
+    }
+
+    function onPointerUp() {
+        if (trimState.isDragging) {
+            trimState.isDragging = null;
+            if (elements.trimHandleStart) elements.trimHandleStart.classList.remove('dragging');
+            if (elements.trimHandleEnd) elements.trimHandleEnd.classList.remove('dragging');
+            updateTrimUI();
+        }
+    }
+
+    document.addEventListener('mousemove', onPointerMove);
+    document.addEventListener('touchmove', onPointerMove, { passive: false });
+    document.addEventListener('mouseup', onPointerUp);
+    document.addEventListener('touchend', onPointerUp);
+
+    // Track click to snap the closest handle
+    if (elements.trimTimeline) {
+        elements.trimTimeline.addEventListener('click', (e) => {
+            if (trimState.duration <= 0) return;
+            if (e.target.closest('.trim-handle')) return;
+            
+            const rect = elements.trimTimeline.getBoundingClientRect();
+            const offsetX = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
+            const ratio = offsetX / rect.width;
+            const clickTime = Math.round(ratio * trimState.duration);
+            
+            const distToStart = Math.abs(clickTime - trimState.startTime);
+            const distToEnd = Math.abs(clickTime - trimState.endTime);
+            
+            if (distToStart <= distToEnd) {
+                trimState.startTime = Math.max(0, Math.min(trimState.endTime - 1, clickTime));
+            } else {
+                trimState.endTime = Math.max(trimState.startTime + 1, Math.min(trimState.duration, clickTime));
+            }
+            clearTrimError();
+            updateTrimUI();
+        });
+    }
+
+    // Keyboard navigation on handles
+    if (elements.trimHandleStart) {
+        elements.trimHandleStart.addEventListener('keydown', (e) => {
+            if (trimState.duration <= 0) return;
+            const step = e.shiftKey ? 5 : 1;
+            if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') {
+                e.preventDefault();
+                trimState.startTime = Math.max(0, trimState.startTime - step);
+                updateTrimUI();
+            } else if (e.key === 'ArrowRight' || e.key === 'ArrowUp') {
+                e.preventDefault();
+                trimState.startTime = Math.min(trimState.endTime - 1, trimState.startTime + step);
+                updateTrimUI();
+            }
+        });
+    }
+
+    if (elements.trimHandleEnd) {
+        elements.trimHandleEnd.addEventListener('keydown', (e) => {
+            if (trimState.duration <= 0) return;
+            const step = e.shiftKey ? 5 : 1;
+            if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') {
+                e.preventDefault();
+                trimState.endTime = Math.max(trimState.startTime + 1, trimState.endTime - step);
+                updateTrimUI();
+            } else if (e.key === 'ArrowRight' || e.key === 'ArrowUp') {
+                e.preventDefault();
+                trimState.endTime = Math.min(trimState.duration, trimState.endTime + step);
+                updateTrimUI();
+            }
+        });
+    }
+}
+
+// ==================== Timestamp Inputs & Controls ====================
+function initTimestampInputs() {
+    function handleStartCommit() {
+        const parsed = parseTimestamp(elements.trimStartInput.value);
+        if (parsed === null || parsed < 0) {
+            showTrimError('Invalid start time (use MM:SS or seconds).');
+            elements.trimStartInput.classList.add('error');
+            return;
+        }
+        if (parsed >= trimState.endTime) {
+            showTrimError('Start time must be less than end time.');
+            elements.trimStartInput.classList.add('error');
+            return;
+        }
+        if (trimState.duration > 0 && parsed >= trimState.duration) {
+            showTrimError('Start time cannot exceed video duration.');
+            elements.trimStartInput.classList.add('error');
+            return;
+        }
+        clearTrimError();
+        trimState.startTime = parsed;
+        updateTrimUI();
+    }
+
+    function handleEndCommit() {
+        const parsed = parseTimestamp(elements.trimEndInput.value);
+        if (parsed === null) {
+            showTrimError('Invalid end time (use MM:SS or seconds).');
+            elements.trimEndInput.classList.add('error');
+            return;
+        }
+        if (parsed <= trimState.startTime) {
+            showTrimError('End time must be greater than start time.');
+            elements.trimEndInput.classList.add('error');
+            return;
+        }
+        if (trimState.duration > 0 && parsed > trimState.duration) {
+            showTrimError(`End time cannot exceed video duration (${formatTimestamp(trimState.duration)}).`);
+            elements.trimEndInput.classList.add('error');
+            return;
+        }
+        clearTrimError();
+        trimState.endTime = parsed;
+        updateTrimUI();
+    }
+
+    if (elements.trimStartInput) {
+        elements.trimStartInput.addEventListener('blur', handleStartCommit);
+        elements.trimStartInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') elements.trimStartInput.blur();
+        });
+    }
+
+    if (elements.trimEndInput) {
+        elements.trimEndInput.addEventListener('blur', handleEndCommit);
+        elements.trimEndInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') elements.trimEndInput.blur();
+        });
+    }
+
+    if (elements.trimResetBtn) {
+        elements.trimResetBtn.addEventListener('click', () => {
+            trimState.startTime = 0;
+            trimState.endTime = trimState.duration > 0 ? trimState.duration : 0;
+            clearTrimError();
+            updateTrimUI();
+        });
+    }
+
+    if (elements.trimEnableToggle) {
+        elements.trimEnableToggle.addEventListener('change', (e) => {
+            trimState.isEnabled = e.target.checked;
+            const textEl = elements.trimEnableToggle.parentElement.querySelector('.trim-switch-text');
+            if (textEl) {
+                textEl.textContent = trimState.isEnabled ? 'Enabled' : 'Disabled';
+            }
+            clearTrimError();
+            updateTrimUI();
+        });
+    }
+}
+
 // ==================== Event Handlers ====================
 async function handlePasteClick() {
     try {
         const text = await navigator.clipboard.readText();
         elements.urlInput.value = text;
         elements.urlInput.focus();
+        if (isValidUrl(text.trim())) {
+            loadVideoMetadata(text.trim());
+        }
     } catch (error) {
         console.error('Failed to read clipboard:', error);
     }
@@ -343,16 +803,49 @@ async function handleConvert() {
     
     // Normalize YouTube Shorts URLs to standard watch URLs
     url = normalizeYouTubeUrl(url);
+
+    // Determine trimming parameters
+    let startTime = null;
+    let endTime = null;
+
+    if (currentMode !== 'image' && trimState.isEnabled) {
+        const isCustomRange = trimState.startTime > 0 || (trimState.duration > 0 && trimState.endTime < trimState.duration);
+        if (isCustomRange) {
+            if (trimState.startTime < 0) {
+                showError('Trim start time cannot be negative.');
+                return;
+            }
+            if (trimState.endTime <= trimState.startTime) {
+                showError('Please enter a valid trim range: End time must be greater than start time.');
+                return;
+            }
+            if (trimState.duration > 0 && trimState.endTime > trimState.duration) {
+                showError(`Trim end time cannot exceed video duration (${formatTimestamp(trimState.duration)}).`);
+                return;
+            }
+            startTime = trimState.startTime;
+            endTime = trimState.endTime;
+        }
+    }
     
     setLoading(true);
     
     try {
-        // Fetch video info
-        const videoInfo = await fetchVideoInfo(url);
+        // Fetch or re-use video info
+        let videoInfo = trimState.cachedVideoInfo;
+        if (!videoInfo || trimState.sourceUrl !== url) {
+            videoInfo = await fetchVideoInfo(url);
+            trimState.cachedVideoInfo = videoInfo;
+            trimState.sourceUrl = url;
+            trimState.duration = Math.max(1, Math.round(videoInfo.duration || 0));
+            if (trimState.endTime === 0 || trimState.endTime > trimState.duration) {
+                trimState.endTime = trimState.duration;
+            }
+        }
         displayVideoPreview(videoInfo);
         
         // Start conversion
-        const conversionResponse = await startConversion(url, selectedFormat);
+        const conversionResponse = await startConversion(url, selectedFormat, startTime, endTime);
         currentJobId = conversionResponse.job_id;
         
         // Show progress section
@@ -362,7 +855,7 @@ async function handleConvert() {
         // Start polling for progress
         startProgressPolling(currentJobId);
         
-        } catch (error) {
+    } catch (error) {
         showError(error.message);
     }
 }
@@ -386,6 +879,15 @@ function handleConvertAnother() {
     
     // Reset progress
     updateProgress('Processing...', 0);
+
+    // Reset trim state
+    trimState.sourceUrl = '';
+    trimState.cachedVideoInfo = null;
+    trimState.duration = 0;
+    trimState.startTime = 0;
+    trimState.endTime = 0;
+    clearTrimError();
+    updateTrimUI();
     
     // Focus input
     elements.urlInput.focus();
@@ -401,6 +903,42 @@ elements.convertBtn.addEventListener('click', handleConvert);
 elements.downloadBtn.addEventListener('click', handleDownload);
 elements.convertAnotherBtn.addEventListener('click', handleConvertAnother);
 elements.tryAgainBtn.addEventListener('click', handleTryAgain);
+
+// Trim toggles beside Quality label
+if (elements.trimToggleAudio) {
+    elements.trimToggleAudio.addEventListener('click', toggleTrimSection);
+}
+if (elements.trimToggleVideo) {
+    elements.trimToggleVideo.addEventListener('click', toggleTrimSection);
+}
+
+// URL input change / paste / blur detection for metadata prefetching
+let urlDebounceTimer = null;
+elements.urlInput.addEventListener('input', () => {
+    clearTimeout(urlDebounceTimer);
+    urlDebounceTimer = setTimeout(() => {
+        const val = elements.urlInput.value.trim();
+        if (isValidUrl(val)) {
+            loadVideoMetadata(val);
+        }
+    }, 600);
+});
+
+elements.urlInput.addEventListener('blur', () => {
+    const val = elements.urlInput.value.trim();
+    if (isValidUrl(val)) {
+        loadVideoMetadata(val);
+    }
+});
+
+elements.urlInput.addEventListener('paste', () => {
+    setTimeout(() => {
+        const val = elements.urlInput.value.trim();
+        if (isValidUrl(val)) {
+            loadVideoMetadata(val);
+        }
+    }, 100);
+});
 
 // Type Selection
 document.querySelectorAll('[data-format="audio"], [data-format="video"], [data-format="image"]').forEach(btn => {
@@ -427,14 +965,17 @@ elements.urlInput.addEventListener('keypress', (e) => {
 });
 
 // ==================== Initialization ====================
-// ==================== Initialization ====================
 console.log('Reelo initialized');
+
+// Initialize timeline drag & inputs
+initTimelineDrag();
+initTimestampInputs();
+
 // Initialize UI state
 if (currentMode === 'audio') {
     elements.videoFormats.classList.add('hidden');
     elements.imageFormats.classList.add('hidden');
     elements.audioFormats.classList.remove('hidden');
-    // Ensure correct type button is active
     document.querySelector('[data-format="video"]').classList.remove('active');
     document.querySelector('[data-format="image"]').classList.remove('active');
     document.querySelector('[data-format="audio"]').classList.add('active');
@@ -442,7 +983,6 @@ if (currentMode === 'audio') {
     elements.audioFormats.classList.add('hidden');
     elements.imageFormats.classList.add('hidden');
     elements.videoFormats.classList.remove('hidden');
-    // Ensure correct type button is active
     document.querySelector('[data-format="audio"]').classList.remove('active');
     document.querySelector('[data-format="image"]').classList.remove('active');
     document.querySelector('[data-format="video"]').classList.add('active');
@@ -454,5 +994,7 @@ if (currentMode === 'audio') {
     document.querySelector('[data-format="video"]').classList.remove('active');
     document.querySelector('[data-format="image"]').classList.add('active');
 }
-// Set initial active format button
+
+// Set initial active format button and trim UI
 selectFormat(selectedFormat);
+updateTrimUI();

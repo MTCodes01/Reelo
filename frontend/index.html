@@ -126,7 +126,15 @@
           </div>
 
           <div class="format-selector active" id="audio-formats">
-            <label class="format-label">Quality:</label>
+            <div class="format-header">
+              <label class="format-label">Quality:</label>
+              <button type="button" class="trim-toggle-btn" id="trim-toggle-audio" title="Trim audio length">
+                <i class="fa-solid fa-scissors"></i>
+                <span>Trim</span>
+                <span class="trim-indicator-dot hidden"></span>
+                <span class="trim-badge hidden">Active</span>
+              </button>
+            </div>
             <div class="format-buttons" style="display: flex">
               <button class="format-btn" data-format="mp3-48" style="flex: 1">
                 48kbps
@@ -156,7 +164,15 @@
           </div>
 
           <div class="format-selector hidden" id="video-formats">
-            <label class="format-label">Quality:</label>
+            <div class="format-header">
+              <label class="format-label">Quality:</label>
+              <button type="button" class="trim-toggle-btn" id="trim-toggle-video" title="Trim video length">
+                <i class="fa-solid fa-scissors"></i>
+                <span>Trim</span>
+                <span class="trim-indicator-dot hidden"></span>
+                <span class="trim-badge hidden">Active</span>
+              </button>
+            </div>
             <div class="format-buttons" style="display: flex">
               <button class="format-btn" data-format="mp4-360" style="flex: 1">
                 360p
@@ -224,6 +240,107 @@
                   >Compressed</span
                 >
               </button>
+            </div>
+          </div>
+
+          <!-- Trimming Controls Section (Hidden by default) -->
+          <div id="trim-section" class="trim-section hidden">
+            <div class="trim-container">
+              <div class="trim-header-row">
+                <div class="trim-title-wrapper">
+                  <i class="fa-solid fa-scissors trim-header-icon"></i>
+                  <span class="trim-title-text">Trim Range</span>
+                  <span class="trim-duration-badge" id="trim-duration-badge">Clip: 00:00</span>
+                </div>
+                <div class="trim-actions">
+                  <label class="trim-toggle-switch-wrapper" title="Enable or disable trimming">
+                    <input type="checkbox" id="trim-enable-toggle" checked />
+                    <span class="trim-switch-slider"></span>
+                    <span class="trim-switch-text">Enabled</span>
+                  </label>
+                  <button type="button" id="trim-reset-btn" class="trim-reset-btn" title="Reset to full video">
+                    <i class="fa-solid fa-rotate-left"></i>
+                    <span>Reset</span>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Interactive Timeline Slider -->
+              <div class="trim-timeline-wrapper">
+                <div class="trim-timeline" id="trim-timeline" role="group" aria-label="Timeline range selector">
+                  <div class="trim-track-bg"></div>
+                  <div class="trim-track-highlight" id="trim-track-highlight"></div>
+                  <div
+                    class="trim-handle trim-handle-start"
+                    id="trim-handle-start"
+                    tabindex="0"
+                    role="slider"
+                    aria-label="Start time"
+                    aria-valuemin="0"
+                    aria-valuemax="0"
+                    aria-valuenow="0"
+                  >
+                    <div class="trim-handle-grip"></div>
+                    <div class="trim-tooltip" id="trim-tooltip-start">00:00</div>
+                  </div>
+                  <div
+                    class="trim-handle trim-handle-end"
+                    id="trim-handle-end"
+                    tabindex="0"
+                    role="slider"
+                    aria-label="End time"
+                    aria-valuemin="0"
+                    aria-valuemax="0"
+                    aria-valuenow="0"
+                  >
+                    <div class="trim-handle-grip"></div>
+                    <div class="trim-tooltip" id="trim-tooltip-end">00:00</div>
+                  </div>
+                </div>
+                <div class="trim-timeline-labels">
+                  <span id="trim-timeline-start-label">00:00</span>
+                  <span id="trim-timeline-status" class="trim-timeline-status">Full Video</span>
+                  <span id="trim-timeline-end-label">--:--</span>
+                </div>
+              </div>
+
+              <!-- Timestamp Inputs Row -->
+              <div class="trim-inputs-row">
+                <div class="trim-input-group">
+                  <label class="trim-input-label" for="trim-start-input">Start</label>
+                  <div class="trim-input-wrapper">
+                    <i class="fa-regular fa-clock trim-field-icon"></i>
+                    <input
+                      type="text"
+                      id="trim-start-input"
+                      class="trim-time-field"
+                      placeholder="00:00"
+                      value="00:00"
+                      autocomplete="off"
+                    />
+                  </div>
+                </div>
+                <div class="trim-arrow-separator">
+                  <i class="fa-solid fa-arrow-right"></i>
+                </div>
+                <div class="trim-input-group">
+                  <label class="trim-input-label" for="trim-end-input">End</label>
+                  <div class="trim-input-wrapper">
+                    <i class="fa-regular fa-clock trim-field-icon"></i>
+                    <input
+                      type="text"
+                      id="trim-end-input"
+                      class="trim-time-field"
+                      placeholder="00:00"
+                      value="00:00"
+                      autocomplete="off"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <!-- Inline Feedback / Validation Message -->
+              <div id="trim-validation-msg" class="trim-validation-msg hidden"></div>
             </div>
           </div>
 

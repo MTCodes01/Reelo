@@ -199,6 +199,8 @@ class VideoConverter:
         website_url: str = "http://localhost:7654",
         duration: int = 0,
         job_id: str = "",
+        start_time: Optional[float] = None,
+        end_time: Optional[float] = None,
     ) -> dict:
         """Get yt-dlp options based on format type and domain.
 
@@ -206,14 +208,16 @@ class VideoConverter:
           - Skip thumbnail embedding (saves one full ffmpeg read+write pass)
           - Prefer pre-muxed streams (saves the separate video+audio merge step)
         """
+        # When trimming, effective duration is the trimmed length
+        effective_duration = int(end_time - start_time) if (start_time is not None and end_time is not None and end_time > start_time) else duration
+
         # Videos longer than 30 minutes are treated as "long". Thumbnail
         # embedding on a 3-hour file means ffmpeg reads and rewrites ~8 GB
         # just to attach a tiny image — skip it to cut I/O roughly in half.
         LONG_VIDEO_THRESHOLD = 30 * 60  # 30 minutes in seconds
-        long_video = duration > LONG_VIDEO_THRESHOLD
+        long_video = effective_duration > LONG_VIDEO_THRESHOLD
 
         is_youtube = "youtube.com" in url or "youtu.be" in url
-
 
         instagram = _is_instagram(url)
 
@@ -260,6 +264,11 @@ class VideoConverter:
             base_opts['remote_components'] = ['ejs:github']
             # Fallback to multiple clients to bypass datacenter IP blocks
             base_opts['extractor_args'] = {'youtube': ['player_client=web,android,ios,web_creator']}
+
+        # Add trimming if requested and valid (applied to audio and video downloads)
+        if start_time is not None and end_time is not None and end_time > start_time:
+            base_opts['download_ranges'] = yt_dlp.utils.download_range_func([], [[start_time, end_time]])
+            base_opts['force_keyframes_at_cuts'] = True
 
         image_formats = [FormatType.IMAGE_PNG, FormatType.IMAGE_JPG, FormatType.IMAGE_JPEG]
         if format_type in image_formats:
@@ -374,6 +383,8 @@ class VideoConverter:
         format_type: FormatType,
         website_url: str = "http://localhost:7654",
         prefetched_info: Optional["VideoInfo"] = None,
+        start_time: Optional[float] = None,
+        end_time: Optional[float] = None,
     ):
         """Download and convert video asynchronously.
 
@@ -399,6 +410,8 @@ class VideoConverter:
                 format_type, url, website_url,
                 duration=video_info.duration,
                 job_id=job_id,
+                start_time=start_time,
+                end_time=end_time,
             )
 
             # Progress hook — runs inside the worker thread, so only mutate
@@ -422,7 +435,39 @@ class VideoConverter:
 
             # Run the blocking download/ffmpeg work in the bounded thread pool
             loop = asyncio.get_running_loop()
-            await loop.run_in_executor(_executor, self._download_video, url, ydl_opts)
+
+            is_trim = start_time is not None and end_time is not None and end_time > start_time
+            if is_trim:
+                clip_dur = int(end_time - start_time)
+                jobs[job_id].message = f"Extracting clip ({clip_dur}s) from stream..."
+                jobs[job_id].progress = 15
+
+                # Estimate time: YouTube streams audio/video at roughly 1.5x - 2.5x playback speed
+                est_seconds = max(6, int(clip_dur / 2.0))
+
+                async def _track_trim_progress():
+                    start_t = loop.time()
+                    try:
+                        while True:
+                            await asyncio.sleep(1.0)
+                            if jobs[job_id].status != "processing" or jobs[job_id].progress >= 80:
+                                break
+                            elapsed = loop.time() - start_t
+                            # Smoothly advance progress from 15% towards 80%
+                            ratio = min(0.95, elapsed / est_seconds)
+                            current_prog = min(80, int(15 + ratio * 65))
+                            jobs[job_id].progress = current_prog
+                            jobs[job_id].message = f"Extracting clip ({clip_dur}s) from stream... {current_prog}%"
+                    except asyncio.CancelledError:
+                        pass
+
+                prog_task = asyncio.create_task(_track_trim_progress())
+                try:
+                    await loop.run_in_executor(_executor, self._download_video, url, ydl_opts)
+                finally:
+                    prog_task.cancel()
+            else:
+                await loop.run_in_executor(_executor, self._download_video, url, ydl_opts)
 
             # Find the file yt-dlp wrote — it's named {job_id}.{ext}
             if format_type in [FormatType.IMAGE_PNG, FormatType.IMAGE_JPG, FormatType.IMAGE_JPEG]:
@@ -478,6 +523,10 @@ class VideoConverter:
                 # Clean up any leftover thumbnail files
                 self._cleanup_thumbnails(job_id)
 
+                # Ensure trimmed length is verified and exact
+                if start_time is not None and end_time is not None and end_time > start_time:
+                    file_path = self._verify_and_trim_media(file_path, start_time, end_time)
+
             # Update job with completion
             jobs[job_id].status = "completed"
             jobs[job_id].progress = 100
@@ -498,6 +547,66 @@ class VideoConverter:
             # to its idle baseline.
             _release_memory()
             logger.debug(f"Memory released after job {job_id}")
+
+    def _verify_and_trim_media(self, file_path: Path, start_time: float, end_time: float) -> Path:
+        """Ensure the downloaded media file has the exact trimmed duration using FFmpeg if needed."""
+        try:
+            import subprocess
+            probe_cmd = [
+                "ffprobe", "-v", "error",
+                "-show_entries", "format=duration",
+                "-of", "default=noprint_wrappers=1:nokey=1",
+                str(file_path)
+            ]
+            result = subprocess.run(probe_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=10)
+            if result.returncode == 0 and result.stdout.strip():
+                actual_duration = float(result.stdout.strip())
+                expected_duration = end_time - start_time
+                if actual_duration > expected_duration + 2.0:
+                    logger.info(f"File duration ({actual_duration}s) exceeds trim target ({expected_duration}s). Running FFmpeg precision trim.")
+                    temp_output = file_path.with_name(f"{file_path.stem}_trimmed{file_path.suffix}")
+                    ffmpeg_cmd = [
+                        "ffmpeg", "-y",
+                        "-ss", str(start_time),
+                        "-to", str(end_time),
+                        "-i", str(file_path),
+                        "-c", "copy",
+                        str(temp_output)
+                    ]
+                    trim_res = subprocess.run(ffmpeg_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=60)
+                    if trim_res.returncode == 0 and temp_output.exists() and temp_output.stat().st_size > 0:
+                        file_path.unlink()
+                        temp_output.rename(file_path)
+                        logger.info("Precision trim applied successfully.")
+                    else:
+                        if file_path.suffix == ".mp3":
+                            reencode_cmd = [
+                                "ffmpeg", "-y",
+                                "-ss", str(start_time),
+                                "-to", str(end_time),
+                                "-i", str(file_path),
+                                "-acodec", "libmp3lame",
+                                "-q:a", "2",
+                                str(temp_output)
+                            ]
+                        else:
+                            reencode_cmd = [
+                                "ffmpeg", "-y",
+                                "-ss", str(start_time),
+                                "-to", str(end_time),
+                                "-i", str(file_path),
+                                "-vcodec", "libx264",
+                                "-acodec", "aac",
+                                str(temp_output)
+                            ]
+                        reencode_res = subprocess.run(reencode_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=60)
+                        if reencode_res.returncode == 0 and temp_output.exists() and temp_output.stat().st_size > 0:
+                            file_path.unlink()
+                            temp_output.rename(file_path)
+                            logger.info("Precision re-encode trim applied successfully.")
+        except Exception as e:
+            logger.warning(f"Precision trim verification error: {e}")
+        return file_path
 
     def _download_video(self, url: str, ydl_opts: dict):
         """Synchronous download function — runs inside the thread pool."""
@@ -550,7 +659,12 @@ class VideoConverter:
 converter = VideoConverter()
 
 
-def create_job(url: str, format_type: FormatType) -> str:
+def create_job(
+    url: str,
+    format_type: FormatType,
+    start_time: Optional[float] = None,
+    end_time: Optional[float] = None,
+) -> str:
     """Create a new conversion job"""
     job_id = str(uuid.uuid4())
     jobs[job_id] = JobStatus(
@@ -560,6 +674,8 @@ def create_job(url: str, format_type: FormatType) -> str:
         message="Job created",
         format=format_type.value,
         created_at=datetime.utcnow().isoformat(),
+        trim_start=start_time,
+        trim_end=end_time,
     )
     return job_id
 

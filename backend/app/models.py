@@ -25,12 +25,16 @@ class ConvertRequest(BaseModel):
     """Request model for video conversion"""
     url: str = Field(..., description="YouTube video URL")
     format: FormatType = Field(..., description="Output format")
+    start_time: Optional[float] = Field(None, description="Trim start time in seconds")
+    end_time: Optional[float] = Field(None, description="Trim end time in seconds")
 
     class Config:
         json_schema_extra = {
             "example": {
                 "url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
-                "format": "mp3"
+                "format": "mp3",
+                "start_time": 10.0,
+                "end_time": 45.0
             }
         }
 
@@ -55,6 +59,8 @@ class JobStatus(BaseModel):
     video_title: Optional[str] = None  # Video title for better filename
     format: Optional[str] = None  # Requested format (mp3, mp4-360, etc.)
     created_at: Optional[str] = None  # ISO timestamp — used by cleanup to evict stale records
+    trim_start: Optional[float] = None
+    trim_end: Optional[float] = None
 
 
 class ConversionResponse(BaseModel):

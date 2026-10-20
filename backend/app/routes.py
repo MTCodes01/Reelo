@@ -42,10 +42,20 @@ async def convert_video(request: ConvertRequest, background_tasks: BackgroundTas
         # Get website URL from request (just host, no protocol)
         website_url = req.headers.get("host", f"{req.client.host}:{req.url.port}")
         
+        # Validate trimming parameters if provided
+        start_time = request.start_time
+        end_time = request.end_time
+
+        if start_time is not None:
+            if start_time < 0:
+                raise HTTPException(status_code=400, detail="Start time cannot be negative")
+            if end_time is not None and end_time <= start_time:
+                raise HTTPException(status_code=400, detail="End time must be greater than start time")
+
         # Create job immediately — don't re-fetch video info here since the
         # frontend already fetched it via /api/info.  Starting the background
         # task right away saves 5-10 s of redundant yt-dlp metadata work.
-        job_id = create_job(request.url, request.format)
+        job_id = create_job(request.url, request.format, start_time=start_time, end_time=end_time)
         
         # Start conversion in background
         background_tasks.add_task(
@@ -54,9 +64,11 @@ async def convert_video(request: ConvertRequest, background_tasks: BackgroundTas
             request.url,
             request.format,
             website_url,
+            start_time=start_time,
+            end_time=end_time,
         )
         
-        logger.info(f"Started conversion job {job_id} for format {request.format}")
+        logger.info(f"Started conversion job {job_id} for format {request.format} (trim: {start_time}-{end_time})")
         
         return ConversionResponse(job_id=job_id)
     
