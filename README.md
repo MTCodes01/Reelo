@@ -123,6 +123,17 @@ CLEANUP_INTERVAL_MINUTES=30
 # Server Settings
 HOST=0.0.0.0
 PORT=8000
+
+# Concurrency / Resource Limits (shared-server safe defaults)
+# MAX_WORKERS: concurrent yt-dlp/ffmpeg jobs
+#   2 = safe for a 16 GB server with other containers running
+#   Raise to 3-4 only if you have >= 4 GB free RAM
+MAX_WORKERS=2
+
+# FFMPEG_THREADS: CPU threads ffmpeg uses per conversion
+#   2 = polite on a shared host
+#   0 = let ffmpeg decide (may use ALL cores -- avoid on shared hosts)
+FFMPEG_THREADS=2
 ```
 
 ## 🌐 Production Deployment
@@ -233,6 +244,35 @@ Once running, visit `http://localhost:8000/docs` for interactive API documentati
 - `GET /api/status/{job_id}` - Check conversion status
 - `GET /api/download/{job_id}` - Download converted file
 - `GET /health` - Health check
+
+## 📈 Performance Monitoring
+
+Every completed job exposes timing metrics via `GET /api/status/{job_id}`:
+
+| Field | Description |
+|-------|-------------|
+| `download_time` | Seconds spent downloading (yt-dlp network phase) |
+| `processing_time` | Seconds spent in ffmpeg post-processing |
+| `total_time` | Wall-clock seconds from job start to finish |
+| `file_size_bytes` | Output file size in bytes |
+
+**Quick benchmark:**
+```bash
+JOB=$(curl -s -X POST http://localhost:7654/api/convert \
+  -H 'Content-Type: application/json' \
+  -d '{"url":"https://youtu.be/dQw4w9WgXcQ","format":"mp3-128"}' | jq -r .job_id)
+
+until curl -s http://localhost:7654/api/status/$JOB | jq -r .status | grep -q completed; do sleep 2; done
+
+curl -s http://localhost:7654/api/status/$JOB | jq '{download_time, processing_time, total_time, file_size_bytes}'
+```
+
+**Interpreting results:**
+- `download_time >> processing_time` — bottleneck is network bandwidth
+- `processing_time >> download_time` — bottleneck is ffmpeg (consider raising `FFMPEG_THREADS`)
+- `total_time` much larger than both — queue backlog (consider raising `MAX_WORKERS`)
+
+All metrics are also logged at INFO level:
 
 ## 🛠️ Development
 

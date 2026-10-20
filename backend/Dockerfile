@@ -37,6 +37,11 @@ RUN mkdir -p /app/downloads
 # Environment variables
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
+# Concurrency defaults -- override at runtime via docker-compose environment or -e flag.
+# MAX_WORKERS=2 : concurrent yt-dlp/ffmpeg jobs (safe for 16 GB shared host)
+# FFMPEG_THREADS=2 : CPU threads per ffmpeg invocation (0 = auto, risky on shared hosts)
+ENV MAX_WORKERS=2
+ENV FFMPEG_THREADS=2
 
 EXPOSE 7654
 

@@ -2,8 +2,10 @@ import os
 import random
 import gc
 import uuid
+import time
 import asyncio
 import ctypes
+import subprocess
 import yt_dlp
 import re
 from concurrent.futures import ThreadPoolExecutor
@@ -16,29 +18,43 @@ from .models import FormatType, VideoInfo, JobStatus
 
 logger = logging.getLogger(__name__)
 
+# ── Environment-tunable performance knobs ──────────────────────────────────────
+# MAX_WORKERS  — concurrent yt-dlp/ffmpeg jobs.
+#   On a 16 GB shared server with other containers 2 workers is a safe default.
+#   Each active job may consume 300–600 MB RAM + 1–4 CPU cores during ffmpeg.
+#   Raise to 3 only if the box is lightly loaded and has >= 12 GB free.
+MAX_WORKERS: int = int(os.getenv("MAX_WORKERS", "2"))
+
+# FFMPEG_THREADS — number of threads ffmpeg uses per conversion.
+#   0 = ffmpeg chooses automatically (uses all cores, aggressive on shared hosts).
+#   1-2 = polite on a shared server; slight throughput reduction, much friendlier.
+FFMPEG_THREADS: int = int(os.getenv("FFMPEG_THREADS", "2"))
+
 
 def _release_memory():
     """Force Python to release unused heap memory back to the OS.
 
     Python's allocator (pymalloc) keeps freed objects in an internal pool
     and never returns them to the OS on its own.  After a large job:
-      1. gc.collect() — frees any reference-cycle garbage
-      2. malloc_trim(0) — tells glibc to return the now-empty pages to the OS
+      1. gc.collect() -- frees any reference-cycle garbage
+      2. malloc_trim(0) -- tells glibc to return the now-empty pages to the OS
     This is Linux-only (no-op on other platforms) and safe to call anytime.
     """
     gc.collect()
     try:
         ctypes.CDLL('libc.so.6').malloc_trim(0)
     except Exception:
-        pass  # Non-Linux (Windows/macOS dev machines) — silently skip
+        pass  # Non-Linux (Windows/macOS dev machines) -- silently skip
 
 # Job storage (in production, use Redis or a database)
 jobs: Dict[str, JobStatus] = {}
 
 # ── Bounded thread pool ────────────────────────────────────────────────────────
 # Limits concurrent yt-dlp / ffmpeg processes so the container doesn't OOM when
-# multiple users hit the API simultaneously.  2 workers = 2 concurrent downloads.
-_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="yt-dlp")
+# multiple users hit the API simultaneously.
+# MAX_WORKERS is read from the environment; default = 2.
+_executor = ThreadPoolExecutor(max_workers=MAX_WORKERS, thread_name_prefix="yt-dlp")
+logger.info(f"Thread pool created: max_workers={MAX_WORKERS}, ffmpeg_threads={FFMPEG_THREADS}")
 
 
 def normalize_youtube_url(url: str) -> str:
@@ -75,6 +91,13 @@ _CHROME_USER_AGENTS = [
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
     'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
 ]
+
+
+def _ffmpeg_thread_args() -> list:
+    """Return FFmpeg -threads argument list if FFMPEG_THREADS is set > 0."""
+    if FFMPEG_THREADS > 0:
+        return ['-threads', str(FFMPEG_THREADS)]
+    return []
 
 
 class VideoConverter:
@@ -125,7 +148,7 @@ class VideoConverter:
             'geo_bypass': False,
         }
 
-        # Optional cookie file for authenticated downloads — lets the
+        # Optional cookie file for authenticated downloads -- lets the
         # deployer use a burner account for higher reliability without
         # code changes.
         cookie_path = os.getenv('INSTAGRAM_COOKIES_FILE')
@@ -146,7 +169,7 @@ class VideoConverter:
             'quiet': True,
             'no_warnings': True,
             'extract_flat': False,
-            # Don't load/parse format list — we only need basic metadata
+            # Don't load/parse format list -- we only need basic metadata
             'skip_download': True,
             # Tight timeout for metadata-only fetch: fail fast and let the
             # caller show an error rather than waiting 20 s per retry.
@@ -200,7 +223,6 @@ class VideoConverter:
 
                     # 3. Fast ffprobe probe on format URL if still unresolved
                     if not info.get('duration') and info.get('formats'):
-                        import subprocess
                         for fmt in info['formats']:
                             fmt_url = fmt.get('url')
                             if fmt_url and (fmt.get('ext') == 'mp4' or fmt.get('vcodec') != 'none'):
@@ -218,8 +240,8 @@ class VideoConverter:
                                 except Exception:
                                     pass
 
-                # Drop the huge 'formats' list immediately — we only need basic
-                # metadata fields and this dict can be 5–10 MB for long videos.
+                # Drop the huge 'formats' list immediately -- we only need basic
+                # metadata fields and this dict can be 5-10 MB for long videos.
                 info.pop('formats', None)
                 info.pop('thumbnails', None)
                 info.pop('automatic_captions', None)
@@ -253,22 +275,50 @@ class VideoConverter:
     ) -> dict:
         """Get yt-dlp options based on format type and domain.
 
-        *duration* (seconds) drives two I/O optimisations for long videos:
+        Optimisation decisions
+        ----------------------
+        MP3:
+          - 'bestaudio[ext=m4a]/bestaudio/best' prefers an audio-only stream
+            so we never download the full video just to strip audio.
+          - Thumbnail embedding is skipped for long videos (ffmpeg would need
+            to read and rewrite the entire file just to attach an image).
+          - 'add_metadata' is set to False at the yt-dlp level; the
+            FFmpegMetadata postprocessor below handles it instead, avoiding a
+            duplicate ffmpeg pass.
+
+        MP4:
+          - 'bestvideo[ext=mp4][height<=N]+bestaudio[ext=m4a]' is tried first.
+            When both streams are already in the right container (mp4/m4a),
+            the ffmpeg merge uses '-c copy' (stream copy), so it just wraps
+            the streams into a new container with zero re-encoding.
+          - Falls back progressively to any video+audio, then any single stream.
+
+        FFmpeg threads:
+          - 'postprocessor_args' passes '-threads N' to every ffmpeg invocation
+            so a single job never monopolises all CPU cores on the host.
+
+        *duration* (seconds) drives I/O optimisations for long videos:
           - Skip thumbnail embedding (saves one full ffmpeg read+write pass)
-          - Prefer pre-muxed streams (saves the separate video+audio merge step)
         """
         # When trimming, effective duration is the trimmed length
-        effective_duration = int(end_time - start_time) if (start_time is not None and end_time is not None and end_time > start_time) else duration
+        effective_duration = (
+            int(end_time - start_time)
+            if (start_time is not None and end_time is not None and end_time > start_time)
+            else duration
+        )
 
-        # Videos longer than 30 minutes are treated as "long". Thumbnail
-        # embedding on a 3-hour file means ffmpeg reads and rewrites ~8 GB
-        # just to attach a tiny image — skip it to cut I/O roughly in half.
+        # Videos longer than 30 minutes are "long": thumbnail embedding on a
+        # 3-hour file means ffmpeg reads and rewrites ~8 GB just for a tiny
+        # image -- skip it to cut I/O roughly in half.
         LONG_VIDEO_THRESHOLD = 30 * 60  # 30 minutes in seconds
         long_video = effective_duration > LONG_VIDEO_THRESHOLD
 
         is_youtube = "youtube.com" in url or "youtu.be" in url
 
         instagram = _is_instagram(url)
+
+        # Build global ffmpeg thread args for all postprocessors
+        thread_args = _ffmpeg_thread_args()
 
         base_opts = {
             # ── Output verbosity ───────────────────────────────────────────
@@ -281,7 +331,7 @@ class VideoConverter:
             # ── Output path ────────────────────────────────────────────────
             # Use the job_id (a plain UUID) as the on-disk filename so we
             # never have to worry about special characters in video titles
-            # (|, :, –, etc.) breaking ffmpeg's output file open call.
+            # (|, :, --, etc.) breaking ffmpeg's output file open call.
             # The user-visible filename is set separately in the download
             # route via Content-Disposition, so nothing changes for users.
             'outtmpl': str(self.download_dir / f'{job_id}.%(ext)s'),
@@ -298,7 +348,9 @@ class VideoConverter:
             'add_metadata': True,
             'ignore_no_formats_error': True,
             'postprocessor_args': {
-                'ffmpeg': ['-metadata', f'comment={website_url}']
+                # Pass thread limit to all ffmpeg invocations so a single
+                # conversion doesn't monopolise all CPU cores on the host.
+                'ffmpeg': ['-metadata', f'comment={website_url}'] + thread_args,
             },
         }
 
@@ -350,10 +402,23 @@ class VideoConverter:
             }
             bitrate = bitrate_map.get(format_type, '192')
 
+            # ── Audio-only format selection ────────────────────────────────
+            # Prefer a pre-existing audio-only stream so we never download
+            # a full video just to strip the audio track.
+            # Priority order:
+            #   1. m4a audio-only  -- best quality, container already supported
+            #   2. any bestaudio   -- opus/webm; ffmpeg transcodes to mp3
+            #   3. best            -- last-resort fallback (includes video)
+            audio_format = 'bestaudio[ext=m4a]/bestaudio/best'
+
             return {
                 **base_opts,
-                'format': 'bestaudio/best',
-                # Only embed thumbnail for short videos — for long videos the
+                'format': audio_format,
+                # Override add_metadata: the FFmpegExtractAudio + FFmpegMetadata
+                # postprocessors below handle all tagging; suppressing the
+                # top-level flag avoids a duplicate metadata-only ffmpeg pass.
+                'add_metadata': False,
+                # Only embed thumbnail for short videos -- for long videos the
                 # ffmpeg re-write pass costs as much I/O as the download itself.
                 'writethumbnail': not long_video,
                 'postprocessors': [
@@ -369,7 +434,7 @@ class VideoConverter:
                     *(
                         [{
                             # EmbedThumbnail removes the standalone image file
-                            # after embedding it — no orphan .webp/.jpg left.
+                            # after embedding it -- no orphan .webp/.jpg left.
                             'key': 'EmbedThumbnail',
                             'already_have_thumbnail': False,
                         }]
@@ -389,26 +454,29 @@ class VideoConverter:
         h = height_map.get(format_type)
 
         if h:
-            # Always request separate video+audio streams for YouTube — YouTube
-            # only offers pre-muxed streams up to ~480p, so requesting
-            # best[height<=1080][ext=mp4] would silently return a 480p stream
-            # when the user asked for 1080p.
-            # The merge I/O cost is unavoidable for high-res; the thumbnail skip
-            # above already handles the main avoidable I/O for long videos.
+            # ── Stream-copy-friendly format selection ──────────────────────
+            # Prefer mp4 video + m4a audio: when both streams are already in
+            # the correct container the ffmpeg merge step uses '-c copy'
+            # (stream copy), no re-encoding, extremely fast and lossless.
+            # Falls back progressively to any video+audio, then any single stream.
             fmt = (
-                f'bestvideo[height<={h}]+bestaudio'
+                f'bestvideo[ext=mp4][height<={h}]+bestaudio[ext=m4a]'
+                f'/bestvideo[height<={h}]+bestaudio'
                 f'/best[height<={h}]'
                 f'/best'
             )
         else:
-            fmt = 'bestvideo+bestaudio/best' if is_youtube else 'best'
-
+            # No height constraint: prefer mp4+m4a for stream-copy merge
+            fmt = (
+                'bestvideo[ext=mp4]+bestaudio[ext=m4a]'
+                '/bestvideo+bestaudio/best'
+            ) if is_youtube else 'best'
 
         return {
             **base_opts,
             'format': fmt,
             'merge_output_format': 'mp4',
-            # Skip thumbnail for long videos — same reason as above.
+            # Skip thumbnail for long videos -- same reason as above.
             'writethumbnail': not long_video,
             'postprocessors': [
                 {
@@ -440,6 +508,8 @@ class VideoConverter:
         Pass *prefetched_info* to skip a redundant yt-dlp metadata call when
         the caller already validated the URL.
         """
+        job_wall_start = time.monotonic()
+
         try:
             # Normalize YouTube Shorts URLs
             url = normalize_youtube_url(url)
@@ -463,7 +533,15 @@ class VideoConverter:
                 end_time=end_time,
             )
 
-            # Progress hook — runs inside the worker thread, so only mutate
+            # ── Timing probes ──────────────────────────────────────────────
+            # We instrument the yt-dlp progress hook to capture the exact
+            # moment the download phase ends and post-processing begins.
+            # These times are stored in the job so callers of /api/status
+            # can identify whether the bottleneck is network or ffmpeg.
+            _t_download_start = time.monotonic()
+            _t_download_end: list = []  # mutated from inside the hook closure
+
+            # Progress hook -- runs inside the worker thread, so only mutate
             # simple Python objects (no async calls here).
             def progress_hook(d):
                 if d['status'] == 'downloading':
@@ -477,6 +555,9 @@ class VideoConverter:
                     except Exception as e:
                         logger.warning(f"Error parsing progress hook: {e}")
                 elif d['status'] == 'finished':
+                    # Capture download finish time once
+                    if not _t_download_end:
+                        _t_download_end.append(time.monotonic())
                     jobs[job_id].progress = 85
                     jobs[job_id].message = "Processing..."
 
@@ -518,19 +599,27 @@ class VideoConverter:
             else:
                 await loop.run_in_executor(_executor, self._download_video, url, ydl_opts)
 
-            # Find the file yt-dlp wrote — it's named {job_id}.{ext}
+            # Record timing: download vs post-processing
+            t_after_download = time.monotonic()
+            dl_end = _t_download_end[0] if _t_download_end else t_after_download
+            jobs[job_id].download_time = round(dl_end - _t_download_start, 2)
+            jobs[job_id].processing_time = round(t_after_download - dl_end, 2)
+
+            # Find the file yt-dlp wrote -- it's named {job_id}.{ext}
             if format_type in [FormatType.IMAGE_PNG, FormatType.IMAGE_JPG, FormatType.IMAGE_JPEG]:
                 # Find all files belonging to this job
-                job_files = [f for f in self.download_dir.iterdir() if f.is_file() and f.name.startswith(job_id) and f.suffix != '.zip']
+                job_files = [
+                    f for f in self.download_dir.iterdir()
+                    if f.is_file() and f.name.startswith(job_id) and f.suffix != '.zip'
+                ]
                 if not job_files:
                     raise Exception("Downloaded files not found")
-                
+
                 target_ext = '.png' if format_type == FormatType.IMAGE_PNG else '.jpeg' if format_type == FormatType.IMAGE_JPEG else '.jpg'
-                
+
                 # Convert any images to the requested format using PIL if they don't match
                 from PIL import Image
-                import io
-                
+
                 converted_files = []
                 for f in job_files:
                     if f.suffix != target_ext:
@@ -548,9 +637,9 @@ class VideoConverter:
                             converted_files.append(f)
                     else:
                         converted_files.append(f)
-                
+
                 job_files = converted_files
-                
+
                 if len(job_files) > 1:
                     import zipfile
                     zip_path = self.download_dir / f"{job_id}.zip"
@@ -576,18 +665,38 @@ class VideoConverter:
                 if start_time is not None and end_time is not None and end_time > start_time:
                     file_path = self._verify_and_trim_media(file_path, start_time, end_time)
 
+            # Record output file size
+            try:
+                jobs[job_id].file_size_bytes = file_path.stat().st_size
+            except Exception:
+                pass
+
             # Update job with completion
             jobs[job_id].status = "completed"
             jobs[job_id].progress = 100
             jobs[job_id].message = "Conversion complete!"
             jobs[job_id].file_path = str(file_path)
+            jobs[job_id].total_time = round(time.monotonic() - job_wall_start, 2)
 
-            logger.info(f"Job {job_id} completed successfully")
+            logger.info(
+                f"Job {job_id} completed | "
+                f"format={format_type.value} "
+                f"dl={jobs[job_id].download_time}s "
+                f"proc={jobs[job_id].processing_time}s "
+                f"total={jobs[job_id].total_time}s "
+                f"size={jobs[job_id].file_size_bytes}B"
+            )
 
         except Exception as e:
             logger.error(f"Job {job_id} failed: {e}")
             jobs[job_id].status = "failed"
             jobs[job_id].error = str(e)
+            jobs[job_id].total_time = round(time.monotonic() - job_wall_start, 2)
+
+            # ── Immediate cleanup on failure ───────────────────────────────
+            # Remove any partial files left by yt-dlp/ffmpeg so they don't
+            # consume disk space until the next scheduled cleanup run.
+            self._cleanup_job_files(job_id)
 
         finally:
             # Always release memory after a job ends (success or failure).
@@ -598,9 +707,18 @@ class VideoConverter:
             logger.debug(f"Memory released after job {job_id}")
 
     def _verify_and_trim_media(self, file_path: Path, start_time: float, end_time: float) -> Path:
-        """Ensure the downloaded media file has the exact trimmed duration using FFmpeg if needed."""
+        """Ensure the downloaded media file has the exact trimmed duration using FFmpeg if needed.
+
+        Strategy:
+          1. Probe actual duration with ffprobe.
+          2. If within 2 s of the expected duration, trust yt-dlp's output
+             and skip the extra ffmpeg pass entirely.
+          3. Otherwise try a stream-copy trim first (-c copy) -- zero quality
+             loss and typically 10-50x faster than re-encoding.
+          4. Fall back to re-encode only if stream-copy produces an empty or
+             corrupt file (can happen at non-keyframe boundaries for MP3).
+        """
         try:
-            import subprocess
             probe_cmd = [
                 "ffprobe", "-v", "error",
                 "-show_entries", "format=duration",
@@ -611,54 +729,85 @@ class VideoConverter:
             if result.returncode == 0 and result.stdout.strip():
                 actual_duration = float(result.stdout.strip())
                 expected_duration = end_time - start_time
-                if actual_duration > expected_duration + 2.0:
-                    logger.info(f"File duration ({actual_duration}s) exceeds trim target ({expected_duration}s). Running FFmpeg precision trim.")
-                    temp_output = file_path.with_name(f"{file_path.stem}_trimmed{file_path.suffix}")
-                    ffmpeg_cmd = [
+
+                if actual_duration <= expected_duration + 2.0:
+                    # Duration is acceptable -- skip the extra pass entirely.
+                    logger.debug(
+                        f"Trim verification OK: actual={actual_duration:.1f}s "
+                        f"expected={expected_duration:.1f}s -- skipping extra ffmpeg pass"
+                    )
+                    return file_path
+
+                logger.info(
+                    f"File duration ({actual_duration:.1f}s) exceeds trim target "
+                    f"({expected_duration:.1f}s). Applying precision trim."
+                )
+                temp_output = file_path.with_name(f"{file_path.stem}_trimmed{file_path.suffix}")
+                thread_args = _ffmpeg_thread_args()
+
+                # ── Attempt 1: stream copy (fast, lossless) ────────────────
+                ffmpeg_cmd = [
+                    "ffmpeg", "-y",
+                    "-ss", str(start_time),
+                    "-to", str(end_time),
+                    "-i", str(file_path),
+                    "-c", "copy",
+                ] + thread_args + [str(temp_output)]
+
+                trim_res = subprocess.run(
+                    ffmpeg_cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    timeout=120,
+                )
+                if trim_res.returncode == 0 and temp_output.exists() and temp_output.stat().st_size > 0:
+                    file_path.unlink()
+                    temp_output.rename(file_path)
+                    logger.info("Precision trim (stream copy) applied successfully.")
+                    return file_path
+
+                # ── Attempt 2: re-encode (slower, always works) ────────────
+                logger.warning(
+                    "Stream-copy trim produced empty/corrupt output; falling back to re-encode."
+                )
+                if temp_output.exists():
+                    temp_output.unlink()
+
+                if file_path.suffix == ".mp3":
+                    reencode_cmd = [
                         "ffmpeg", "-y",
                         "-ss", str(start_time),
                         "-to", str(end_time),
                         "-i", str(file_path),
-                        "-c", "copy",
-                        str(temp_output)
-                    ]
-                    trim_res = subprocess.run(ffmpeg_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=60)
-                    if trim_res.returncode == 0 and temp_output.exists() and temp_output.stat().st_size > 0:
-                        file_path.unlink()
-                        temp_output.rename(file_path)
-                        logger.info("Precision trim applied successfully.")
-                    else:
-                        if file_path.suffix == ".mp3":
-                            reencode_cmd = [
-                                "ffmpeg", "-y",
-                                "-ss", str(start_time),
-                                "-to", str(end_time),
-                                "-i", str(file_path),
-                                "-acodec", "libmp3lame",
-                                "-q:a", "2",
-                                str(temp_output)
-                            ]
-                        else:
-                            reencode_cmd = [
-                                "ffmpeg", "-y",
-                                "-ss", str(start_time),
-                                "-to", str(end_time),
-                                "-i", str(file_path),
-                                "-vcodec", "libx264",
-                                "-acodec", "aac",
-                                str(temp_output)
-                            ]
-                        reencode_res = subprocess.run(reencode_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=60)
-                        if reencode_res.returncode == 0 and temp_output.exists() and temp_output.stat().st_size > 0:
-                            file_path.unlink()
-                            temp_output.rename(file_path)
-                            logger.info("Precision re-encode trim applied successfully.")
+                        "-acodec", "libmp3lame",
+                        "-q:a", "2",
+                    ] + thread_args + [str(temp_output)]
+                else:
+                    reencode_cmd = [
+                        "ffmpeg", "-y",
+                        "-ss", str(start_time),
+                        "-to", str(end_time),
+                        "-i", str(file_path),
+                        "-vcodec", "libx264",
+                        "-acodec", "aac",
+                    ] + thread_args + [str(temp_output)]
+
+                reencode_res = subprocess.run(
+                    reencode_cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    timeout=120,
+                )
+                if reencode_res.returncode == 0 and temp_output.exists() and temp_output.stat().st_size > 0:
+                    file_path.unlink()
+                    temp_output.rename(file_path)
+                    logger.info("Precision trim (re-encode) applied successfully.")
         except Exception as e:
             logger.warning(f"Precision trim verification error: {e}")
         return file_path
 
     def _download_video(self, url: str, ydl_opts: dict):
-        """Synchronous download function — runs inside the thread pool."""
+        """Synchronous download function -- runs inside the thread pool."""
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.download([url])
 
@@ -678,6 +827,26 @@ class VideoConverter:
                     logger.debug(f"Removed leftover thumbnail: {candidate.name}")
                 except Exception as e:
                     logger.warning(f"Could not remove thumbnail {candidate}: {e}")
+
+    def _cleanup_job_files(self, job_id: str):
+        """Remove ALL files belonging to a job -- called on failure to free disk immediately.
+
+        Scans the download directory for any file whose stem matches the job UUID
+        (e.g. {job_id}.mp4, {job_id}.webp, {job_id}.part, {job_id}.ytdl, ...).
+        """
+        if not self.download_dir.exists():
+            return
+        removed = 0
+        for f in list(self.download_dir.iterdir()):
+            if f.is_file() and f.stem == job_id:
+                try:
+                    f.unlink()
+                    removed += 1
+                    logger.debug(f"Removed partial file on failure: {f.name}")
+                except Exception as e:
+                    logger.warning(f"Could not remove partial file {f}: {e}")
+        if removed:
+            logger.info(f"Cleaned up {removed} partial file(s) for failed job {job_id}")
 
     def _find_downloaded_file(self, job_id: str, expected_ext: str) -> Optional[Path]:
         """Find the file yt-dlp wrote for this job (named {job_id}.{ext})."""

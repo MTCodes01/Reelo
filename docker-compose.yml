@@ -13,4 +13,22 @@ services:
       - HOST=0.0.0.0
       - PORT=7654
       - LOG_LEVEL=info
+      # ── Concurrency limits ─────────────────────────────────────────────────
+      # Safe defaults for a 16 GB shared server with other containers running.
+      # Raise MAX_WORKERS to 3 only if you have >= 4 GB of free RAM headroom.
+      # Set FFMPEG_THREADS=0 to let ffmpeg auto-detect (uses all cores; risky
+      # on shared hosts).
+      - MAX_WORKERS=2
+      - FFMPEG_THREADS=2
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          # Hard cap: Reelo will never exceed 4 GB RAM or 2 full CPU cores.
+          # Adjust cpus upward on a dedicated host or downward on a busier box.
+          cpus: '2.0'
+          memory: 4G
+        reservations:
+          # Guaranteed minimum so the container is not starved under load.
+          cpus: '0.5'
+          memory: 512M

@@ -61,6 +61,11 @@ class JobStatus(BaseModel):
     created_at: Optional[str] = None  # ISO timestamp — used by cleanup to evict stale records
     trim_start: Optional[float] = None
     trim_end: Optional[float] = None
+    # ── Performance metrics (populated by converter) ───────────────────────────
+    download_time: Optional[float] = None   # seconds spent in yt-dlp download
+    processing_time: Optional[float] = None # seconds spent in ffmpeg post-processing
+    total_time: Optional[float] = None      # wall-clock seconds from start to completion
+    file_size_bytes: Optional[int] = None   # final output file size in bytes
 
 
 class ConversionResponse(BaseModel):
