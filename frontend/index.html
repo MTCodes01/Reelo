@@ -39,7 +39,7 @@
     <meta name="twitter:title" content="Reelo - YT & Insta Converter" />
     <meta name="twitter:description" content="Fast and free YouTube and Instagram video downloader. Convert to MP3 and MP4 in high quality." />
     <meta name="twitter:image" content="static/logo/Reelo_color.png" />
-    <link rel="stylesheet" href="static/css/style.css?v=1.1" />
+    <link rel="stylesheet" href="static/css/style.css?v=1.2" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -420,7 +420,19 @@
             </div>
             <h3>Oops! Something went wrong</h3>
             <p id="error-message" class="error-message"></p>
-            <button id="try-again-btn" class="try-again-btn">Try Again</button>
+            <div class="error-actions">
+              <button id="try-again-btn" class="try-again-btn">Try Again</button>
+              <a
+                href="https://github.com/MTCodes01/Reelo/issues"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="error-report-btn"
+                id="error-report-btn"
+              >
+                <i class="fa-brands fa-github"></i>
+                <span>Report Issue</span>
+              </a>
+            </div>
           </div>
         </section>
       </main>
@@ -446,6 +458,19 @@
 
       <!-- Footer -->
       <footer class="footer">
+        <div class="footer-links">
+          <a
+            href="https://github.com/MTCodes01/Reelo/issues"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="footer-issue-link"
+            id="raise-issue-footer-link"
+          >
+            <i class="fa-brands fa-github"></i>
+            <span>Report an Issue</span>
+            <i class="fa-solid fa-arrow-up-right-from-square external-icon"></i>
+          </a>
+        </div>
         <p>&copy; 2026 Reelo. For personal use only.</p>
         <p class="disclaimer">
           This tool is for downloading videos you have permission to download.
@@ -454,6 +479,6 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
-    <script src="static/js/app.js?v=1.1"></script>
+    <script src="static/js/app.js?v=1.2"></script>
   </body>
 </html>

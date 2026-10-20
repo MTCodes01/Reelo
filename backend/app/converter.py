@@ -168,13 +168,62 @@ class VideoConverter:
         def _fetch():
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(url, download=False)
+                if not info:
+                    return None
+
+                # Extract duration if missing (yt-dlp often returns duration=None for Instagram)
+                if not info.get('duration'):
+                    # 1. Try extracting from Instagram 'efg' parameter in format URLs
+                    for fmt in info.get('formats', []):
+                        fmt_url = fmt.get('url', '')
+                        if 'efg=' in fmt_url:
+                            try:
+                                import urllib.parse, base64, json
+                                qs = urllib.parse.parse_qs(urllib.parse.urlparse(fmt_url).query)
+                                if 'efg' in qs:
+                                    b64_val = qs['efg'][0]
+                                    b64_val += '=' * (-len(b64_val) % 4)
+                                    efg_data = json.loads(base64.b64decode(b64_val))
+                                    dur = efg_data.get('duration_s') or efg_data.get('duration')
+                                    if dur:
+                                        info['duration'] = float(dur)
+                                        break
+                            except Exception:
+                                pass
+
+                    # 2. Check individual format duration fields
+                    if not info.get('duration'):
+                        for fmt in info.get('formats', []):
+                            if fmt.get('duration'):
+                                info['duration'] = float(fmt['duration'])
+                                break
+
+                    # 3. Fast ffprobe probe on format URL if still unresolved
+                    if not info.get('duration') and info.get('formats'):
+                        import subprocess
+                        for fmt in info['formats']:
+                            fmt_url = fmt.get('url')
+                            if fmt_url and (fmt.get('ext') == 'mp4' or fmt.get('vcodec') != 'none'):
+                                try:
+                                    cmd = [
+                                        'ffprobe', '-v', 'error',
+                                        '-show_entries', 'format=duration',
+                                        '-of', 'default=noprint_wrappers=1:nokey=1',
+                                        fmt_url
+                                    ]
+                                    res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=3)
+                                    if res.returncode == 0 and res.stdout.strip():
+                                        info['duration'] = float(res.stdout.strip())
+                                        break
+                                except Exception:
+                                    pass
+
                 # Drop the huge 'formats' list immediately — we only need basic
                 # metadata fields and this dict can be 5–10 MB for long videos.
-                if info:
-                    info.pop('formats', None)
-                    info.pop('thumbnails', None)
-                    info.pop('automatic_captions', None)
-                    info.pop('subtitles', None)
+                info.pop('formats', None)
+                info.pop('thumbnails', None)
+                info.pop('automatic_captions', None)
+                info.pop('subtitles', None)
                 return info
 
         try:

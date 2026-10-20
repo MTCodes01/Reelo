@@ -121,7 +121,7 @@ function isValidUrl(url) {
         /^(https?:\/\/)?(www\.|music\.)?youtube\.com\/watch\?.*v=[\w-]+/,
         /^(https?:\/\/)?(www\.)?youtube\.com\/shorts\/[\w-]+/,
         /^(https?:\/\/)?(www\.)?youtube\.com\/live\/[\w-]+/,
-        /^(https?:\/\/)?(www\.)?instagram\.com\/(p|reels|tv)\/[\w-]+\/?/,
+        /^(https?:\/\/)?(www\.)?(instagram\.com|instagr\.am)\/(p|reels?|tv|share\/reel)\/[\w-]+\/?/i,
         /^(https?:\/\/)?([a-z0-9-]+\.)?pinterest\.[a-z.]+\/pin\/[\w-]+\/?/,
         /^(https?:\/\/)?pin\.it\/[\w-]+\/?/,
         /^(https?:\/\/)?([a-z0-9-]+\.)?pinimg\.com\/.+/
