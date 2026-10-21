@@ -6,6 +6,7 @@ import time
 import asyncio
 import ctypes
 import subprocess
+import json
 import yt_dlp
 import re
 from concurrent.futures import ThreadPoolExecutor
@@ -406,10 +407,16 @@ class VideoConverter:
             # Prefer a pre-existing audio-only stream so we never download
             # a full video just to strip the audio track.
             # Priority order:
-            #   1. m4a audio-only  -- best quality, container already supported
-            #   2. any bestaudio   -- opus/webm; ffmpeg transcodes to mp3
-            #   3. best            -- last-resort fallback (includes video)
-            audio_format = 'bestaudio[ext=m4a]/bestaudio/best'
+            #   1. m4a audio-only (direct HTTPS) -- best quality, stream-copy friendly
+            #   2. any bestaudio (direct HTTPS)  -- opus/webm; ffmpeg transcodes to mp3
+            #   3. fallback to any audio/best including HLS
+            audio_format = (
+                'bestaudio[ext=m4a][protocol!*=m3u8]'
+                '/bestaudio[protocol!*=m3u8]'
+                '/bestaudio[ext=m4a]'
+                '/bestaudio'
+                '/best'
+            )
 
             return {
                 **base_opts,
@@ -455,20 +462,25 @@ class VideoConverter:
 
         if h:
             # ── Stream-copy-friendly format selection ──────────────────────
-            # Prefer mp4 video + m4a audio: when both streams are already in
-            # the correct container the ffmpeg merge step uses '-c copy'
-            # (stream copy), no re-encoding, extremely fast and lossless.
+            # Prefer direct HTTPS streams (protocol!*=m3u8) over HLS (m3u8_native).
+            # Seeking/trimming YouTube's HLS VP9 streams (e.g. itag 614, 616) fails in FFmpeg,
+            # which drops the video stream completely and leaves only audio + thumbnail.
+            # Direct HTTPS streams (like 137, 248, 399, 700, 701) trim and stream-copy reliably.
             # Falls back progressively to any video+audio, then any single stream.
             fmt = (
-                f'bestvideo[ext=mp4][height<={h}]+bestaudio[ext=m4a]'
+                f'bestvideo[ext=mp4][height<={h}][protocol!*=m3u8]+bestaudio[ext=m4a][protocol!*=m3u8]'
+                f'/bestvideo[height<={h}][protocol!*=m3u8]+bestaudio[protocol!*=m3u8]'
+                f'/bestvideo[ext=mp4][height<={h}]+bestaudio[ext=m4a]'
                 f'/bestvideo[height<={h}]+bestaudio'
                 f'/best[height<={h}]'
                 f'/best'
             )
         else:
-            # No height constraint: prefer mp4+m4a for stream-copy merge
+            # No height constraint: prefer mp4+m4a with direct HTTPS for stream-copy merge
             fmt = (
-                'bestvideo[ext=mp4]+bestaudio[ext=m4a]'
+                'bestvideo[ext=mp4][protocol!*=m3u8]+bestaudio[ext=m4a][protocol!*=m3u8]'
+                '/bestvideo[protocol!*=m3u8]+bestaudio[protocol!*=m3u8]'
+                '/bestvideo[ext=mp4]+bestaudio[ext=m4a]'
                 '/bestvideo+bestaudio/best'
             ) if is_youtube else 'best'
 
@@ -665,6 +677,11 @@ class VideoConverter:
                 if start_time is not None and end_time is not None and end_time > start_time:
                     file_path = self._verify_and_trim_media(file_path, start_time, end_time)
 
+                if expected_ext == '.mp4':
+                    # Verify that the downloaded file contains an actual video stream
+                    if not self._verify_video_stream(file_path):
+                        raise Exception("Downloaded video file is missing the video track (only audio was received)")
+
             # Record output file size
             try:
                 jobs[job_id].file_size_bytes = file_path.stat().st_size
@@ -706,6 +723,28 @@ class VideoConverter:
             _release_memory()
             logger.debug(f"Memory released after job {job_id}")
 
+    def _verify_video_stream(self, file_path: Path) -> bool:
+        """Check if the media file has at least one real video stream (excluding attached_pic)."""
+        try:
+            cmd = [
+                "ffprobe", "-v", "error",
+                "-show_streams",
+                "-of", "json",
+                str(file_path)
+            ]
+            res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=10)
+            if res.returncode == 0:
+                data = json.loads(res.stdout)
+                for stream in data.get("streams", []):
+                    if stream.get("codec_type") == "video":
+                        disp = stream.get("disposition", {})
+                        if disp.get("attached_pic") != 1:
+                            return True
+            return False
+        except Exception as e:
+            logger.warning(f"Failed to probe video stream: {e}")
+            return True
+
     def _verify_and_trim_media(self, file_path: Path, start_time: float, end_time: float) -> Path:
         """Ensure the downloaded media file has the exact trimmed duration using FFmpeg if needed.
 
@@ -745,11 +784,21 @@ class VideoConverter:
                 temp_output = file_path.with_name(f"{file_path.stem}_trimmed{file_path.suffix}")
                 thread_args = _ffmpeg_thread_args()
 
+                # If start_time >= actual_duration, the file was already range-downloaded starting near 0,
+                # so the clip starts at offset 0 up to expected_duration.
+                # Otherwise, the file is a full download, so seek to start_time.
+                if start_time < actual_duration:
+                    trim_ss = str(start_time)
+                    trim_to = str(end_time)
+                else:
+                    trim_ss = "0"
+                    trim_to = str(expected_duration)
+
                 # ── Attempt 1: stream copy (fast, lossless) ────────────────
                 ffmpeg_cmd = [
                     "ffmpeg", "-y",
-                    "-ss", str(start_time),
-                    "-to", str(end_time),
+                    "-ss", trim_ss,
+                    "-to", trim_to,
                     "-i", str(file_path),
                     "-c", "copy",
                 ] + thread_args + [str(temp_output)]
@@ -776,8 +825,8 @@ class VideoConverter:
                 if file_path.suffix == ".mp3":
                     reencode_cmd = [
                         "ffmpeg", "-y",
-                        "-ss", str(start_time),
-                        "-to", str(end_time),
+                        "-ss", trim_ss,
+                        "-to", trim_to,
                         "-i", str(file_path),
                         "-acodec", "libmp3lame",
                         "-q:a", "2",
@@ -785,8 +834,8 @@ class VideoConverter:
                 else:
                     reencode_cmd = [
                         "ffmpeg", "-y",
-                        "-ss", str(start_time),
-                        "-to", str(end_time),
+                        "-ss", trim_ss,
+                        "-to", trim_to,
                         "-i", str(file_path),
                         "-vcodec", "libx264",
                         "-acodec", "aac",
