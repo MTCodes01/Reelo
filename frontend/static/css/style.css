@@ -23,6 +23,13 @@
   /* Slate 50 */
   --text-muted: #94a3b8;
   /* Slate 400 */
+  --logo-start: #fff;
+  --logo-end: #94a3b8;
+  --gradient-primary: rgba(99, 102, 241, 0.08);
+  --gradient-secondary: rgba(236, 72, 153, 0.08);
+  --tab-hover: rgba(255, 255, 255, 0.05);
+  --focus-glow: rgba(99, 102, 241, 0.1);
+  color-scheme: dark;
 
   /* Borders & Shadows */
   --border: rgba(255, 255, 255, 0.1);
@@ -39,6 +46,23 @@
   --radius-sm: 0.5rem;
   --max-width: 640px;
   /* Narrower for better focus */
+}
+
+[data-theme="light"] {
+  --bg-body: #f1f5f9;
+  --bg-card: #ffffff;
+  --bg-input: #e2e8f0;
+  --bg-hover: #cbd5e1;
+  --text-main: #1e293b;
+  --text-muted: #64748b;
+  --border: rgba(15, 23, 42, 0.12);
+  --logo-start: #312e81;
+  --logo-end: #6366f1;
+  --gradient-primary: rgba(99, 102, 241, 0.12);
+  --gradient-secondary: rgba(236, 72, 153, 0.1);
+  --tab-hover: rgba(15, 23, 42, 0.06);
+  --focus-glow: rgba(99, 102, 241, 0.16);
+  color-scheme: light;
 }
 
 /* ==================== Reset & Base ==================== */
@@ -74,12 +98,12 @@ body {
   background:
     radial-gradient(
       circle at 15% 50%,
-      rgba(99, 102, 241, 0.08),
+      var(--gradient-primary),
       transparent 25%
     ),
     radial-gradient(
       circle at 85% 30%,
-      rgba(236, 72, 153, 0.08),
+      var(--gradient-secondary),
       transparent 25%
     );
   pointer-events: none;
@@ -99,8 +123,39 @@ body {
 
 /* ==================== Header ==================== */
 .header {
+  position: relative;
   text-align: center;
   margin-bottom: 2.5rem;
+  padding-top: 3.25rem;
+}
+
+.theme-toggle {
+  position: absolute;
+  top: 0;
+  right: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.55rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-card);
+  color: var(--text-main);
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.theme-toggle:hover {
+  background: var(--bg-input);
+}
+
+.theme-toggle:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
 }
 
 .logo {
@@ -119,7 +174,7 @@ body {
   font-size: 2rem;
   font-weight: 800;
   letter-spacing: -0.025em;
-  background: linear-gradient(to right, #fff, #94a3b8);
+  background: linear-gradient(to right, var(--logo-start), var(--logo-end));
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -174,7 +229,7 @@ body {
   outline: none;
   border-color: var(--primary);
   background: var(--bg-body);
-  box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1);
+  box-shadow: 0 0 0 4px var(--focus-glow);
 }
 
 .url-input::placeholder {
@@ -248,7 +303,7 @@ body {
 
 .format-btn:hover {
   color: var(--text-main);
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--tab-hover);
 }
 
 .format-btn.active {

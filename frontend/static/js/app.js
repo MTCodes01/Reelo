@@ -13,6 +13,7 @@ let currentMode = 'audio';
 
 // ==================== DOM Elements ====================
 const elements = {
+    themeToggle: document.getElementById('theme-toggle'),
     urlInput: document.getElementById('youtube-url'),
     pasteBtn: document.getElementById('paste-btn'),
     convertBtn: document.getElementById('convert-btn'),
@@ -41,6 +42,30 @@ const elements = {
     errorMessage: document.getElementById('error-message'),
     tryAgainBtn: document.getElementById('try-again-btn')
 };
+
+function setTheme(theme, persist = true) {
+    const isLight = theme === 'light';
+    document.documentElement.dataset.theme = isLight ? 'light' : 'dark';
+    elements.themeToggle.setAttribute('aria-pressed', String(isLight));
+    elements.themeToggle.setAttribute(
+        'aria-label',
+        `Switch to ${isLight ? 'dark' : 'light'} theme`
+    );
+    elements.themeToggle.innerHTML = `
+        <i class="fa-solid ${isLight ? 'fa-moon' : 'fa-sun'}" aria-hidden="true"></i>
+        <span>${isLight ? 'Dark mode' : 'Light mode'}</span>
+    `;
+
+    if (persist) {
+        localStorage.setItem('reelo-theme', isLight ? 'light' : 'dark');
+    }
+}
+
+setTheme(localStorage.getItem('reelo-theme') === 'light' ? 'light' : 'dark', false);
+elements.themeToggle.addEventListener('click', () => {
+    const nextTheme = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light';
+    setTheme(nextTheme);
+});
 
 // ==================== Utility Functions ====================
 function normalizeYouTubeUrl(url) {
